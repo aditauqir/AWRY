@@ -18,6 +18,8 @@ From the project root:
 
 ```bash
 .\.venv\Scripts\python.exe -m streamlit run src\dashboard\app.py
+# COMMENT: Generate vintage-vs-revised comparison (one-time, ~30 seconds)
+python -m src.evaluation.alfred_comparison
 ```
 
 ## Tests

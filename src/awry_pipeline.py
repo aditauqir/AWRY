@@ -1,10 +1,11 @@
-"""End-to-end: build table, train horizon models, ensemble, composite."""
+"""End-to-end training and OOF evaluation pipeline for AWRY."""
 
 from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 _SRC = Path(__file__).resolve().parent
 if str(_SRC) not in sys.path:
@@ -13,108 +14,153 @@ if str(_SRC) not in sys.path:
 import numpy as np
 import pandas as pd
 
-from features.dataset_builder import build_model_table, feature_matrix_columns
+from evaluation.walk_forward import run_full_walk_forward
+from features.dataset_builder import feature_matrix_columns
 from features.equity_config import DEFAULT_EQUITY_SERIES
-from models.composite import composite_score
-from models.ensemble import brier_optimal_weights, ensemble_predict
-from models.logistic import fit_logistic
-from models.random_forest import fit_random_forest
 
 
 @dataclass
 class HorizonModels:
+    """A fitted horizon-specific stacker plus metadata for exports."""
+
     horizon: int
-    logit: object
-    rf: object
-    w1: float
-    w2: float
+    ensemble: object
+    base_names: list[str]
+    fixed_weights: tuple[float, float] | None
+    metrics: dict[str, float]
+    meta_coefficients: dict[str, float]
+
+    @property
+    def logit(self):
+        return self.ensemble.base_models.get("logit")
+
+    @property
+    def rf(self):
+        return self.ensemble.base_models.get("rf")
+
+    @property
+    def xgb(self):
+        return self.ensemble.base_models.get("xgb")
+
+    @property
+    def w1(self) -> float:
+        return float(self.fixed_weights[0]) if self.fixed_weights else float("nan")
+
+    @property
+    def w2(self) -> float:
+        return float(self.fixed_weights[1]) if self.fixed_weights else float("nan")
+
+    def predict_proba(self, X) -> np.ndarray:
+        return np.asarray(self.ensemble.predict_proba(X), dtype=float)
 
 
 @dataclass
 class AwryPipeline:
+    """Final fitted horizon models plus OOF and in-sample histories."""
+
     df: pd.DataFrame
     x_cols: list[str]
     now: HorizonModels
     forecast3: HorizonModels
     alpha: float
+    oof_history: pd.DataFrame
+    full_history: pd.DataFrame
+    thresholds: dict[str, float]
+    summary: dict[str, Any]
 
     def predict_row(self, X: np.ndarray) -> tuple[float, float, float]:
-        """Returns (p_now, p_3m, p_awry)."""
-        X = X.reshape(1, -1)
-        p0_l = self.now.logit.predict_proba(X)[0, 1]
-        p0_r = self.now.rf.predict_proba(X)[0, 1]
-        p_now = ensemble_predict(self.now.w1, self.now.w2, np.array([p0_l]), np.array([p0_r]))[0]
-        p3_l = self.forecast3.logit.predict_proba(X)[0, 1]
-        p3_r = self.forecast3.rf.predict_proba(X)[0, 1]
-        p_3m = ensemble_predict(self.forecast3.w1, self.forecast3.w2, np.array([p3_l]), np.array([p3_r]))[0]
-        p_awry = composite_score(np.array([p_now]), np.array([p_3m]), self.alpha)[0]
+        """Return (p_now, p_3m, p_awry) for a single row."""
+        X_df = pd.DataFrame([X], columns=self.x_cols)
+        p_now = self.now.predict_proba(X_df)[0]
+        p_3m = self.forecast3.predict_proba(X_df)[0]
+        p_awry = self.alpha * p_now + (1.0 - self.alpha) * p_3m
         return float(p_now), float(p_3m), float(p_awry)
 
 
-def train_horizon(
-    train: pd.DataFrame,
-    val: pd.DataFrame,
-    x_cols: list[str],
-    target_col: str,
-) -> HorizonModels:
-    X_tr = train[x_cols].values
-    y_tr = train[target_col].values.astype(int)
-    X_va = val[x_cols].values
-    y_va = val[target_col].values.astype(int)
-
-    logit = fit_logistic(X_tr, y_tr)
-    rf = fit_random_forest(X_tr, y_tr)
-
-    p_l_va = logit.predict_proba(X_va)[:, 1]
-    p_r_va = rf.predict_proba(X_va)[:, 1]
-    w1, w2 = brier_optimal_weights(y_va, p_l_va, p_r_va)
-
-    hz = int(target_col.replace("target_h", ""))
-    return HorizonModels(horizon=hz, logit=logit, rf=rf, w1=w1, w2=w2)
+def _build_full_history(df: pd.DataFrame, x_cols: list[str], now: HorizonModels, forecast3: HorizonModels, alpha: float) -> pd.DataFrame:
+    X = df[x_cols]
+    out = df[["USREC"]].copy()
+    out["P_now"] = now.predict_proba(X)
+    out["P_3m"] = forecast3.predict_proba(X)
+    out["P_AWRY"] = alpha * out["P_now"] + (1.0 - alpha) * out["P_3m"]
+    if "target_h0" in df.columns:
+        out["target_h0"] = df["target_h0"].values
+    if "target_h3" in df.columns:
+        out["target_h3"] = df["target_h3"].values
+    return out
 
 
 def fit_awry_pipeline(
     val_fraction: float = 0.15,
-    alpha: float = 0.5,
+    alpha: float | None = None,
     cached: bool = True,
     equity_series: str | None = None,
+    feature_set: str = "full_news",
+    save_artifacts: bool = True,
 ) -> AwryPipeline:
+    """Fit the horizon stackers and compute OOF artifacts for the dashboard."""
+    del val_fraction  # COMMENT: The new pipeline uses purged walk-forward CV instead.
     eq = equity_series or DEFAULT_EQUITY_SERIES
-    df = build_model_table(cached=cached, equity_series=eq)
-    x_cols = feature_matrix_columns(df)
-    n = len(df)
-    split = int(n * (1.0 - val_fraction))
-    train = df.iloc[:split]
-    val = df.iloc[split:]
-
-    now = train_horizon(train, val, x_cols, "target_h0")
-    forecast3 = train_horizon(train, val, x_cols, "target_h3")
-
-    return AwryPipeline(df=df, x_cols=x_cols, now=now, forecast3=forecast3, alpha=alpha)
-
-
-def predict_history(pipe: AwryPipeline) -> pd.DataFrame:
-    """In-sample / full-series probabilities (for charting)."""
-    X = pipe.df[pipe.x_cols].values
-    pl_now = ensemble_predict(
-        pipe.now.w1,
-        pipe.now.w2,
-        pipe.now.logit.predict_proba(X)[:, 1],
-        pipe.now.rf.predict_proba(X)[:, 1],
+    result = run_full_walk_forward(
+        cached=cached,
+        equity_series=eq,
+        feature_set=feature_set,
+        save_artifacts=save_artifacts,
     )
-    pl_3 = ensemble_predict(
-        pipe.forecast3.w1,
-        pipe.forecast3.w2,
-        pipe.forecast3.logit.predict_proba(X)[:, 1],
-        pipe.forecast3.rf.predict_proba(X)[:, 1],
+    chosen_alpha = float(result["summary"]["alpha"] if alpha is None else alpha)
+    now_eval = result["now"]
+    forecast_eval = result["forecast"]
+
+    now = HorizonModels(
+        horizon=0,
+        ensemble=now_eval.final_ensemble,
+        base_names=now_eval.base_names,
+        fixed_weights=now_eval.fixed_weights,
+        metrics=now_eval.metrics,
+        meta_coefficients=now_eval.meta_coefficients,
     )
-    p_awry = composite_score(pl_now, pl_3, pipe.alpha)
-    out = pipe.df[["USREC"]].copy()
-    out["P_now"] = pl_now
-    out["P_3m"] = pl_3
-    out["P_AWRY"] = p_awry
-    if "target_h0" in pipe.df.columns:
-        out["target_h0"] = pipe.df["target_h0"].values
-    if "target_h3" in pipe.df.columns:
-        out["target_h3"] = pipe.df["target_h3"].values
-    return out
+    forecast3 = HorizonModels(
+        horizon=3,
+        ensemble=forecast_eval.final_ensemble,
+        base_names=forecast_eval.base_names,
+        fixed_weights=forecast_eval.fixed_weights,
+        metrics=forecast_eval.metrics,
+        meta_coefficients=forecast_eval.meta_coefficients,
+    )
+
+    df = now_eval.df.copy()
+    x_cols = feature_matrix_columns(df, feature_set=feature_set)
+    x_cols = [col for col in x_cols if col in df.columns and col in now_eval.x_cols]
+    reference_history = result.get("composite_reference")
+    if isinstance(reference_history, pd.DataFrame) and not reference_history.empty:
+        full_history = reference_history.copy()
+    else:
+        full_history = _build_full_history(df, x_cols, now, forecast3, chosen_alpha)
+
+    oof_history = result["composite_oof"].copy()
+    if chosen_alpha != float(result["summary"]["alpha"]):
+        oof_history["P_AWRY"] = chosen_alpha * oof_history["P_now"] + (1.0 - chosen_alpha) * oof_history["P_3m"]
+
+    summary = dict(result["summary"])
+    summary["alpha"] = chosen_alpha
+
+    return AwryPipeline(
+        df=df,
+        x_cols=x_cols,
+        now=now,
+        forecast3=forecast3,
+        alpha=chosen_alpha,
+        oof_history=oof_history,
+        full_history=full_history,
+        thresholds=summary["thresholds"],
+        summary=summary,
+    )
+
+
+def predict_history(pipe: AwryPipeline, *, use_oof: bool = True) -> pd.DataFrame:
+    """Return the OOF history by default; full-history predictions remain available for reference."""
+    return pipe.oof_history.copy() if use_oof else pipe.full_history.copy()
+
+
+def train_horizon(*args, **kwargs):  # pragma: no cover - compatibility shim
+    raise RuntimeError("train_horizon has been replaced by the purged walk-forward stacker path.")

@@ -1,0 +1,57 @@
+{
+  "target": "target_h3",
+  "feature_set": "baseline",
+  "metrics": {
+    "brier": 0.05321726274193622,
+    "auroc": 0.8442078754578755,
+    "f1": 0.42105263157894735
+  },
+  "meta_coefficients": {
+    "intercept": -3.6202405882719755,
+    "logit": 0.18253579894106933,
+    "rf": 0.6466243432353883,
+    "xgb": -0.9358984381802853
+  },
+  "fixed_weights": [
+    0.09,
+    0.91
+  ],
+  "dropped_lags": [],
+  "x_cols": [
+    "PAYEMS",
+    "INDPRO",
+    "W875RX1",
+    "RRSFS",
+    "UNRATE",
+    "ICSA",
+    "T10Y3M",
+    "FEDFUNDS",
+    "BAA10Y",
+    "HOUST",
+    "PERMIT",
+    "NASDAQCOM",
+    "VIXCLS",
+    "PAYEMS_lag1",
+    "PAYEMS_lag2",
+    "INDPRO_lag1",
+    "INDPRO_lag2",
+    "W875RX1_lag1",
+    "W875RX1_lag2",
+    "RRSFS_lag1",
+    "RRSFS_lag2",
+    "UNRATE_lag1",
+    "UNRATE_lag2",
+    "ICSA_lag1",
+    "ICSA_lag2",
+    "T10Y3M_lag2",
+    "BAA10Y_lag2",
+    "HOUST_lag1",
+    "HOUST_lag2",
+    "PERMIT_lag1",
+    "PERMIT_lag2",
+    "NASDAQCOM_lag1",
+    "NASDAQCOM_lag2",
+    "VIXCLS_lag1",
+    "VIXCLS_lag2"
+  ]
+}

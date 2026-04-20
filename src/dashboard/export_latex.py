@@ -11,6 +11,7 @@ from dashboard.export_summary import (
     EQUITY_DISPLAY_NAME,
     EQUITY_FRED_SERIES_ID,
     _fmt_pct,
+    _load_alfred_comparison,
     collect_awry_export_payload,
 )
 
@@ -179,6 +180,8 @@ def build_awry_latex_export(
         label="tab:raw",
     )
     test_tex = _df_to_latex(p["test_tbl"], column_format="|l|r|r|")
+    alfred_df = _load_alfred_comparison()
+    alfred_tex = _df_to_latex(alfred_df, column_format="|l|l|r|r|r|r|") if not alfred_df.empty else ""
 
     parts: list[str] = [
         r"\documentclass[conference,onecolumn]{IEEEtran}",
@@ -234,6 +237,7 @@ def build_awry_latex_export(
         rf"\item \textbf{{Nowcast:}} Logit {p['w_now_logit']:.4f}, RF {p['w_now_rf']:.4f}.",
         rf"\item \textbf{{3-Month Forecast:}} Logit {p['w_fc_logit']:.4f}, RF {p['w_fc_rf']:.4f}.",
         r"\end{itemize}",
+        r"For the three principal backtest scenarios (2001, 2008, 2020), we supplement the revised-data evaluation with a point-in-time vintage evaluation using ALFRED (Archival FRED) vintages for revision-sensitive series --- PAYEMS, INDPRO, RRSFS, and W875RX1. Financial and index series (rates, spreads, VIX, news-based indices) are not revised and use current FRED values. This produces a model prediction reflecting exactly the information that would have been available to a real-time analyst on each backtest date.",
         r"",
         r"\section{Current Model Indicators}",
         rf"Table~\ref{{tab:kpi}} summarizes KPIs for the latest reporting period.",
@@ -251,6 +255,9 @@ def build_awry_latex_export(
         r"\label{tab:diag}",
         r"\end{center}",
         r"\end{table}",
+        r"\section{Vintage vs.\ Revised Comparison}",
+        r"Table N compares AWRY's composite probability computed on vintage inputs versus revised inputs for each backtest date. The vintage-data probability is the honest real-time signal; the revised-data probability reflects what the model would say today knowing all subsequent revisions. The delta quantifies the look-ahead bias embedded in any evaluation using revised data.",
+        alfred_tex,
         r"\section{Raw Indicator Levels}",
         r"Recent raw feature levels appear in Table~\ref{tab:raw}.",
         raw_tex,
@@ -274,6 +281,8 @@ def build_awry_latex_export(
         rf"\item $\alpha \cdot P_{{\mathrm{{now}}}}$ = {_fmt_pct(alpha * p['p_now_t'])}",
         rf"\item $(1-\alpha) \cdot P_{{\mathrm{{3m}}}}$ = {_fmt_pct((1.0 - alpha) * p['p_3m_t'])}",
         r"\end{itemize}",
+        r"\section{Limitations}",
+        r"ALFRED vintage data is used for revision-sensitive series (PAYEMS, INDPRO, RRSFS, W875RX1) in the three principal backtest scenarios. The walk-forward cross-validation on the full sample, however, uses current revised data for computational efficiency. This means the walk-forward OOS metrics incorporate a small look-ahead bias from benchmark revisions, quantified separately via the vintage-vs.-revised comparison in Table N.",
         r"\end{document}",
         "",
     ]

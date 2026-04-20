@@ -22,12 +22,15 @@ from dashboard.components.backtest_chart import (
     lead_months_yield,
     scenario_comparison_figure,
 )
+from dashboard.components.backtest_view import scenario_panel
 from dashboard.components.composite_breakdown import composite_breakdown_figure
 from dashboard.components.diagnostics_panel import compute_binary_metrics, roc_figure
 from dashboard.components.gauge import awry_gauge_figure
+from dashboard.components.indicators import compute_driver_items
 from dashboard.components.indicator_panel import indicator_bars_figure
+from dashboard.components.model_explainer import render_model_explainer
 from dashboard.components.timeline import probability_timeline
-from dashboard.data_helpers import raw_monthly_panel
+from dashboard.data_helpers import load_ablation_summary, raw_monthly_panel
 from dashboard.export_latex import build_awry_latex_export
 from dashboard.export_summary import build_awry_markdown_export
 from dashboard.styles.theme import DASHBOARD_CSS
@@ -179,6 +182,8 @@ def _build_indicator_items(raw: pd.DataFrame) -> list[tuple[str, float, str, str
 
 @st.cache_resource
 def _pipeline_and_history(_cache_bust: int = 6):
+    # COMMENT: Keep the call signature compatible with older cached Streamlit imports.
+    # The current pipeline defaults to feature_set="full" and save_artifacts=True.
     pipe = fit_awry_pipeline(cached=True, equity_series=DEFAULT_EQUITY_SERIES)
     hist = predict_history(pipe)
     return pipe, hist
@@ -195,6 +200,8 @@ def main() -> None:
 
     pipe, hist = _pipeline_and_history()
     raw = raw_monthly_panel()
+    ablation_summary = load_ablation_summary()
+    scenario_hist = pipe.full_history.copy() if hasattr(pipe, "full_history") else hist.copy()
 
     last = hist.iloc[-1]
     prev_row = hist.iloc[-2] if len(hist) > 1 else last
@@ -207,6 +214,8 @@ def main() -> None:
 
     delta_pp = (p_awry - float(prev_row["P_AWRY"])) * 100.0
     diag_metrics = compute_binary_metrics(hist["USREC"].values, hist["P_AWRY"].values)
+    threshold_payload = getattr(pipe, "thresholds", {}) or {}
+    default_threshold = float(threshold_payload.get("threshold", 0.5))
 
     # Header
     h1, h2 = st.columns([3, 1])
@@ -219,6 +228,7 @@ def main() -> None:
             '<p style="color:#94a3b8;font-size:1.05rem;margin:0.15rem 0 0 0;">Are We in a Recession Yet?</p>',
             unsafe_allow_html=True,
         )
+        st.info("Displayed probabilities are out-of-sample from walk-forward CV with a 3-month purge gap.")
     with h2:
         st.caption(
             f"Latest model row: **t** = {_month_end_label(last_ts)} · "
@@ -284,10 +294,13 @@ def main() -> None:
     with g1:
         st.plotly_chart(awry_gauge_figure(p_awry), use_container_width=True)
     with g2:
-        st.plotly_chart(indicator_bars_figure(_build_indicator_items(raw)), use_container_width=True)
+        # COMMENT: Prefer model-derived drivers. Fall back to the heuristic macro bars
+        # if the explainer artifact is unavailable or the model lacks importances.
+        driver_items = compute_driver_items(pipe) or _build_indicator_items(raw)
+        st.plotly_chart(indicator_bars_figure(driver_items), use_container_width=True)
 
     # Historical chart
-    st.caption("Historical AWRY probability")
+    st.caption("Historical AWRY probability (OOF walk-forward)")
     mode = st.radio(
         "Series",
         ["Composite", "Nowcast", "3-month forecast"],
@@ -313,6 +326,8 @@ def main() -> None:
         use_container_width=True,
     )
 
+    render_model_explainer(pipe, raw, default_threshold)
+
     # Bottom: backtest + diagnostics
     b1, b2 = st.columns([1, 1])
 
@@ -323,9 +338,13 @@ def main() -> None:
             list(SCENARIOS.keys()),
             horizontal=True,
         )
-        st.caption("Months relative to approximate recession start (R0). Signals are scaled for overlay.")
-        st.plotly_chart(scenario_comparison_figure(hist, raw, scenario), use_container_width=True)
-        la = lead_months_awry(hist, scenario)
+        st.caption(
+            "Months relative to approximate recession start (R0). "
+            f"Scenario overlays use the fitted reference signal at the {AWRY_BACKTEST_SIGNAL_THRESHOLD:.0%} "
+            "signal line so lead times reflect the full model stack."
+        )
+        st.plotly_chart(scenario_comparison_figure(scenario_hist, raw, scenario), use_container_width=True)
+        la = lead_months_awry(scenario_hist, scenario, threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD)
         ls = lead_months_sahm(raw, scenario)
         ly = lead_months_yield(raw, scenario)
         la_s = f"−{la}M" if la is not None else "—"
@@ -335,7 +354,7 @@ def main() -> None:
             f"""
 <div class="backtest-signal-grid">
   <div class="backtest-signal-card">
-    <div class="bss-label">AWRY signal (≥30%)</div>
+    <div class="bss-label">AWRY signal (>= {AWRY_BACKTEST_SIGNAL_THRESHOLD:.0%})</div>
     <div class="bss-value">{la_s}</div>
     <div class="bss-sub">months before R0</div>
   </div>
@@ -353,9 +372,10 @@ def main() -> None:
 """,
             unsafe_allow_html=True,
         )
+        scenario_panel(ablation_summary)
 
     with b2:
-        st.markdown("### Model diagnostics")
+        st.markdown("### Model diagnostics (OOS)")
         d1, d2, d3 = st.columns(3)
         d1.metric("AUROC", f"{diag_metrics['auroc']:.3f}" if not np.isnan(diag_metrics["auroc"]) else "—")
         d2.metric("Brier score", f"{diag_metrics['brier']:.3f}")
@@ -363,7 +383,11 @@ def main() -> None:
         t0 = hist.index[0]
         t1 = hist.index[-1]
         n_m = len(hist)
-        st.caption(f"Train window (in-sample): **{n_m}** months · {_month_end_label(t0)}–{_month_end_label(t1)}")
+        st.caption(
+            "OOS window: "
+            f"**{n_m}** months from {_month_end_label(t0)} to {_month_end_label(t1)}. "
+            "In-sample reference metrics are saved in `artifacts/models/in_sample_metrics.json`."
+        )
         st.plotly_chart(roc_figure(hist["USREC"].values, hist["P_AWRY"].values), use_container_width=True)
 
     with st.expander("Raw indicators (latest month)"):
@@ -371,12 +395,12 @@ def main() -> None:
         st.dataframe(raw_df, use_container_width=True)
 
     st.divider()
-    st.subheader("Historical test case (in-sample)")
+    st.subheader("Historical test case (walk-forward OOF)")
     st.caption(
         "Pick a past month. **P_now** vs NBER that month; **P_3m** vs NBER three months later. "
-        "Threshold vs actual NBER (not vintage re-run)."
+        "Threshold vs actual NBER using OOF probabilities."
     )
-    threshold = st.slider("Decision threshold", 0.1, 0.9, 0.5, 0.05)
+    threshold = st.slider("Decision threshold", 0.1, 0.9, float(round(default_threshold / 0.05) * 0.05), 0.05)
 
     idx_map = {pd.Timestamp(t).strftime("%Y-%m"): pd.Timestamp(t) for t in hist.index}
     month_keys = list(idx_map.keys())

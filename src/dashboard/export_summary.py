@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+from config import FIGURES_DIR
 from features import equity_config as _equity_config
 
 # Support older equity_config that only defined DEFAULT_EQUITY_SERIES.
@@ -47,6 +48,13 @@ def _dataframe_to_markdown(df: pd.DataFrame) -> str:
                 cells.append(str(v))
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
+
+
+def _load_alfred_comparison() -> pd.DataFrame:
+    path = FIGURES_DIR / "alfred_comparison.csv"
+    if not path.exists():
+        return pd.DataFrame()
+    return pd.read_csv(path)
 
 
 def collect_awry_export_payload(
@@ -158,6 +166,7 @@ def collect_awry_export_payload(
         "p_now_t": p_now_t,
         "p_3m_t": p_3m_t,
         "p_awry_t": p_awry_t,
+        "alfred": _load_alfred_comparison(),
     }
 
 
@@ -211,6 +220,15 @@ def build_awry_markdown_export(
         f"- **Horizon ensembles (logit + RF):** nowcast — logit {p['w_now_logit']:.4f}, RF {p['w_now_rf']:.4f}; "
         f"3-month — logit {p['w_fc_logit']:.4f}, RF {p['w_fc_rf']:.4f}.\n"
     )
+    parts.append("\n## Methodology Notes\n\n")
+    parts.append(
+        "For the three principal backtest scenarios (2001, 2008, 2020), we supplement the revised-data "
+        "evaluation with a point-in-time vintage evaluation using ALFRED (Archival FRED) vintages for "
+        "revision-sensitive series — PAYEMS, INDPRO, RRSFS, and W875RX1. Financial and index series "
+        "(rates, spreads, VIX, news-based indices) are not revised and use current FRED values. This "
+        "produces a model prediction reflecting exactly the information that would have been available to "
+        "a real-time analyst on each backtest date.\n"
+    )
     parts.append("\n## Latest model row (dashboard KPIs)\n\n")
     parts.append(_dataframe_to_markdown(p["snap"]))
 
@@ -219,6 +237,22 @@ def build_awry_markdown_export(
 
     parts.append("\n## Model diagnostics (in-sample, composite vs NBER)\n\n")
     parts.append(_dataframe_to_markdown(p["diag"]))
+    if not p["alfred"].empty:
+        parts.append("\n## Vintage vs Revised Comparison\n\n")
+        parts.append(
+            "Table N compares AWRY's composite probability computed on vintage inputs versus revised inputs "
+            "for each backtest date. The vintage-data probability is the honest real-time signal; the revised-data "
+            "probability reflects what the model would say today knowing all subsequent revisions. The delta "
+            "quantifies the look-ahead bias embedded in any evaluation using revised data.\n\n"
+        )
+        parts.append(_dataframe_to_markdown(p["alfred"]))
+    parts.append("\n## Limitations\n\n")
+    parts.append(
+        "ALFRED vintage data is used for revision-sensitive series (PAYEMS, INDPRO, RRSFS, W875RX1) in the "
+        "three principal backtest scenarios. The walk-forward cross-validation on the full sample, however, "
+        "uses current revised data for computational efficiency. This means the walk-forward OOS metrics "
+        "incorporate a small look-ahead bias from benchmark revisions, quantified separately via the vintage-vs-revised comparison in Table N.\n"
+    )
 
     parts.append("\n## Raw indicator levels (last rows in model panel)\n\n")
     parts.append(_dataframe_to_markdown(p["raw_fmt"]))

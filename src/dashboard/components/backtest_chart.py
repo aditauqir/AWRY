@@ -8,8 +8,10 @@ import plotly.graph_objects as go
 from dashboard.styles.theme import COLORS
 
 
-# First month before R0 where P_AWRY >= this value (backtest scenario metrics only).
-AWRY_BACKTEST_SIGNAL_THRESHOLD = 0.30
+# COMMENT: OOF probabilities are more conservative than the old in-sample dashboard.
+# Use a dedicated early-warning signal line for scenario lead charts instead of the
+# stricter classification cutoff.
+AWRY_BACKTEST_SIGNAL_THRESHOLD = 0.10
 
 SCENARIOS = {
     "2008 GFC": ("2006-01-01", "2010-06-30", "2007-12-01"),
@@ -84,15 +86,19 @@ def _months_before_r0(ts: pd.Timestamp, r0: pd.Timestamp) -> int:
     return int(round((r0 - ts).days / 30.44))
 
 
-def lead_months_awry(hist: pd.DataFrame, scenario: str) -> int | None:
-    """Months before R0 when AWRY first crosses ``AWRY_BACKTEST_SIGNAL_THRESHOLD``."""
+def lead_months_awry(
+    hist: pd.DataFrame,
+    scenario: str,
+    threshold: float = AWRY_BACKTEST_SIGNAL_THRESHOLD,
+) -> int | None:
+    """Months before R0 when AWRY first crosses the chosen decision threshold."""
     start, _, r0 = SCENARIOS[scenario]
     r0 = pd.Timestamp(r0)
     start = pd.Timestamp(start)
     h = hist.loc[(hist.index >= start) & (hist.index < r0)]
     if h.empty:
         return None
-    cross = h[h["P_AWRY"] >= AWRY_BACKTEST_SIGNAL_THRESHOLD]
+    cross = h[h["P_AWRY"] >= float(threshold)]
     if cross.empty:
         return None
     return _months_before_r0(cross.index[0], r0)

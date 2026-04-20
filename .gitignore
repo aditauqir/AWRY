@@ -10,5 +10,6 @@ mlruns/
 data/raw/*.csv
 data/processed/*.csv
 data/vintages/
+data/alfred/*.parquet
 *.joblib
 .DS_Store

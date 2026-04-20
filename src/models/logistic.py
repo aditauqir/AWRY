@@ -1,23 +1,16 @@
-"""L2 logistic regression for recession probability."""
+"""Backward-compatible wrapper around the new regularized logistic pipeline."""
 
 from __future__ import annotations
 
-import numpy as np
-from sklearn.linear_model import LogisticRegression
+from models.logit import fit_logit
 
 
 def fit_logistic(
-    X: np.ndarray,
-    y: np.ndarray,
+    X,
+    y,
     C: float = 1.0,
     class_weight: str | dict | None = "balanced",
     max_iter: int = 2000,
-) -> LogisticRegression:
-    model = LogisticRegression(
-        C=C,
-        solver="lbfgs",
-        class_weight=class_weight,
-        max_iter=max_iter,
-    )
-    model.fit(X, y)
-    return model
+    cv=None,
+):
+    return fit_logit(X, y, cv=cv)

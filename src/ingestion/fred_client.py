@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import os
 import time
-from pathlib import Path
+from typing import Callable
 
 import pandas as pd
-from dotenv import load_dotenv
 from fredapi import Fred
+
+from config import RAW_DATA_DIR, load_project_env, require_env
 
 SERIES_IDS = [
     "PAYEMS",
@@ -25,27 +25,41 @@ SERIES_IDS = [
     "VIXCLS",
     "USREC",
 ]
+load_project_env()
 
 
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
-
-
-load_dotenv(_project_root() / ".env")
-
-
-def _raw_dir() -> Path:
-    d = _project_root() / "data" / "raw"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def _raw_dir():
+    RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    return RAW_DATA_DIR
 
 
 class FredClient:
-    def __init__(self, api_key: str | None = None) -> None:
-        key = api_key or os.environ.get("FRED_API_KEY")
-        if not key:
-            raise ValueError("FRED_API_KEY missing: set in .env or pass api_key=")
+    def __init__(
+        self,
+        api_key: str | None = None,
+        max_retries: int = 3,
+        retry_delay_seconds: float = 1.0,
+    ) -> None:
+        load_project_env()
+        key = api_key or require_env("FRED_API_KEY")
         self._fred = Fred(api_key=key)
+        self._max_retries = max_retries
+        self._retry_delay_seconds = retry_delay_seconds
+
+    def _fetch_with_retries(self, loader: Callable[[], pd.Series], series_id: str) -> pd.Series:
+        last_error: Exception | None = None
+        for attempt in range(1, self._max_retries + 1):
+            try:
+                return loader()
+            except Exception as exc:
+                last_error = exc
+                if attempt == self._max_retries:
+                    break
+                time.sleep(self._retry_delay_seconds * attempt)
+        msg = f"FRED fetch failed for {series_id}"
+        if last_error is not None:
+            msg = f"{msg}: {last_error}"
+        raise ValueError(msg) from last_error
 
     def fetch_series(
         self,
@@ -54,10 +68,13 @@ class FredClient:
         observation_end: str | None = None,
     ) -> pd.Series:
         """Return a pandas Series indexed by observation date."""
-        s = self._fred.get_series(
-            series_id,
-            observation_start=observation_start,
-            observation_end=observation_end,
+        s = self._fetch_with_retries(
+            lambda: self._fred.get_series(
+                series_id,
+                observation_start=observation_start,
+                observation_end=observation_end,
+            ),
+            series_id=series_id,
         )
         s.name = series_id
         return s
@@ -76,20 +93,27 @@ class FredClient:
         or last observation more than ``stale_if_last_obs_days`` before today (pulls fresh FRED data).
         """
         path = _raw_dir() / f"{series_id}.csv"
+        cached_series: pd.Series | None = None
         if not force_refresh and path.exists():
             try:
                 age_sec = time.time() - path.stat().st_mtime
                 stale_file = age_sec > max_cache_age_hours * 3600
                 df = pd.read_csv(path, index_col=0, parse_dates=True)
+                cached_series = df[series_id].squeeze()
                 last = pd.Timestamp(df.index.max()).normalize()
                 days_behind = (pd.Timestamp.now().normalize() - last).days
                 last_stale = days_behind > stale_if_last_obs_days
                 if not stale_file and not last_stale:
-                    return df[series_id].squeeze()
+                    return cached_series
             except (OSError, ValueError, KeyError):
-                pass
+                cached_series = None
 
-        s = self.fetch_series(series_id, observation_start, observation_end)
+        try:
+            s = self.fetch_series(series_id, observation_start, observation_end)
+        except Exception:
+            if cached_series is not None:
+                return cached_series
+            raise
         pd.DataFrame({series_id: s}).to_csv(path)
         return s
 
