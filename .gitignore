@@ -1,0 +1,14 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+mlruns/
+data/raw/*.csv
+data/processed/*.csv
+data/vintages/
+*.joblib
+.DS_Store
