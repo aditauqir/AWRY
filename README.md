@@ -53,7 +53,7 @@ The local news-sentiment file is optional. If it is missing, AWRY fills that col
 
 ## Required Systems and Software
 
-Use these versions or newer unless your instructor requires an exact environment lock.
+Use these versions or newer.
 
 | Requirement | Version / Notes |
 |---|---|
@@ -84,17 +84,6 @@ Get a free FRED API key here:
 
 https://fred.stlouisfed.org/docs/api/api_key.html
 
-## Submission Contents
-
-Submit the full repository, including:
-
-- All project source code under `src/`, `scripts/`, and `tests/`.
-- `requirements.txt`, `.env.example`, `README.md`, and `LICENSE`.
-- Generated artifacts under `artifacts/` if your instructor wants reproducible report outputs without rerunning the full pipeline.
-- Any exported report files under `artifacts/reports/` and `artifacts/report_bundle/`.
-
-No separate compiled executable is required for the standard submission because AWRY is a Python project run from source. If a course platform specifically asks for executables, include the Python entry commands below as the required execution method.
-
 ## Demo File Walkthrough
 
 Use these files when showing the project structure in a demo. They tell the whole story from data collection to model output without needing to open every helper file.
@@ -102,7 +91,7 @@ Use these files when showing the project structure in a demo. They tell the whol
 ```text
 AWRY/
 |-- README.md
-|   Project overview, required software, install steps, run commands, and submission notes.
+|   Project overview, required software, install steps, and run commands.
 |-- requirements.txt
 |   Python package list used to recreate the environment.
 |-- LICENSE
