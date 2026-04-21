@@ -57,6 +57,11 @@ def _snap_field_display(field: str) -> str:
         "α·P_now": r"$\alpha \cdot P_{\mathrm{now}}$",
         "(1−α)·P_3m": r"$(1-\alpha) \cdot P_{\mathrm{3m}}$",
         "NBER USREC (same month)": r"NBER USREC (same month)",
+        "Composite AUROC": r"Composite AUROC",
+        "Composite Brier": r"Composite Brier",
+        "Composite F1": r"Composite F1",
+        "Fitted threshold tau*": r"Fitted threshold $\tau^*$",
+        "Class imbalance": r"Class imbalance",
     }
     return m.get(field, _tex_cell(field))
 
@@ -180,6 +185,25 @@ def build_awry_latex_export(
         label="tab:raw",
     )
     test_tex = _df_to_latex(p["test_tbl"], column_format="|l|r|r|")
+    diagnostic_tables = p["diagnostic_tables"]
+    fold_tex = _df_to_latex(
+        diagnostic_tables["fold_counts"],
+        longtable=True,
+        caption="Walk-forward fold positive counts.",
+        label="tab:fold_structure",
+    )
+    lead_tex = _df_to_latex(
+        diagnostic_tables["scenario_leads"],
+        longtable=True,
+        caption="Scenario probability peaks and lead times at the nearest fitted-threshold sweep column.",
+        label="tab:scenario_leads",
+    )
+    pr_tex = _df_to_latex(
+        diagnostic_tables["precision_recall_tradeoff"],
+        longtable=True,
+        caption="Threshold precision-recall and false-positive tradeoff.",
+        label="tab:pr_tradeoff",
+    )
     alfred_df = _load_alfred_comparison()
     alfred_tex = _df_to_latex(alfred_df, column_format="|l|l|r|r|r|r|") if not alfred_df.empty else ""
 
@@ -255,6 +279,15 @@ def build_awry_latex_export(
         r"\label{tab:diag}",
         r"\end{center}",
         r"\end{table}",
+        r"\subsection{Walk-Forward Fold Structure}",
+        r"Table~\ref{tab:fold_structure} reports the positive-class distribution in each walk-forward split.",
+        fold_tex,
+        r"\subsection{Scenario Lead Times at Fitted Threshold}",
+        r"Table~\ref{tab:scenario_leads} combines pre-recession probability peaks with the nearest fitted-threshold column available in the diagnostic threshold sweep.",
+        lead_tex,
+        r"\subsection{Precision-Recall Tradeoff}",
+        r"Table~\ref{tab:pr_tradeoff} summarizes false positives, precision, and recall across diagnostic thresholds.",
+        pr_tex,
         r"\section{Vintage vs.\ Revised Comparison}",
         r"Table N compares AWRY's composite probability computed on vintage inputs versus revised inputs for each backtest date. The vintage-data probability is the honest real-time signal; the revised-data probability reflects what the model would say today knowing all subsequent revisions. The delta quantifies the look-ahead bias embedded in any evaluation using revised data.",
         alfred_tex,

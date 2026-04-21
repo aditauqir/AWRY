@@ -9,7 +9,7 @@ It is generated deterministically from files already present in the repository.
 
 | file | feature_set | alpha | threshold | composite_auroc | composite_brier | composite_f1 |
 | --- | --- | --- | --- | --- | --- | --- |
-| artifacts/models/walk_forward_summary_baseline.json | baseline | 0.85 | 0.395347 | 0.949061 | 0.0359592 | 0.723404 |
+| artifacts/models/walk_forward_summary_baseline.json | baseline | 1 | 0.23254 | 0.887248 | 0.0465556 | 0.571429 |
 | artifacts/models/walk_forward_summary_full.json | full | 0.6 | 0.323802 | 0.949519 | 0.0341841 | 0.666667 |
 | artifacts/models/walk_forward_summary_full_news.json | full_news | 0.25 | 0.157946 | 0.768429 | 0.0586605 | 0.294118 |
 | artifacts/models/walk_forward_summary_stress.json | stress | 0.8 | 0.421087 | 0.947459 | 0.0337766 | 0.711111 |
@@ -19,18 +19,17 @@ It is generated deterministically from files already present in the repository.
 | source | parameter | value |
 | --- | --- | --- |
 | thresholds.json | class_imbalance | 0.0823529 |
-| thresholds.json | f1 | 0.583333 |
-| thresholds.json | precision | 0.7 |
-| thresholds.json | recall | 0.5 |
-| thresholds.json | threshold | 0.157946 |
-| composite_baseline_metrics.json | alpha | 0.85 |
+| thresholds.json | f1 | 0.68 |
+| thresholds.json | precision | 0.772727 |
+| thresholds.json | recall | 0.607143 |
+| thresholds.json | threshold | 0.23254 |
+| composite_baseline_metrics.json | alpha | 1 |
 | composite_full_metrics.json | alpha | 0.6 |
 | composite_full_news_metrics.json | alpha | 0.25 |
 | composite_stress_metrics.json | alpha | 0.8 |
-| forecast3_baseline_metrics.json | meta_intercept | -3.62024 |
-| forecast3_baseline_metrics.json | meta_logit | 0.182536 |
-| forecast3_baseline_metrics.json | meta_rf | 0.646624 |
-| forecast3_baseline_metrics.json | meta_xgb | -0.935898 |
+| forecast3_baseline_metrics.json | meta_intercept | -2.23816 |
+| forecast3_baseline_metrics.json | meta_logit | 0.2133 |
+| forecast3_baseline_metrics.json | meta_rf | -0.210081 |
 | forecast3_baseline_metrics.json | fixed_weights | [0.09, 0.91] |
 | forecast3_full_metrics.json | meta_intercept | -4.24706 |
 | forecast3_full_metrics.json | meta_logit | 0.0539938 |
@@ -46,10 +45,9 @@ It is generated deterministically from files already present in the repository.
 | forecast3_stress_metrics.json | meta_rf | 1.03891 |
 | forecast3_stress_metrics.json | meta_xgb | -1.21946 |
 | forecast3_stress_metrics.json | fixed_weights | [0.1, 0.9] |
-| nowcast_baseline_metrics.json | meta_intercept | -3.45734 |
-| nowcast_baseline_metrics.json | meta_logit | 0.310016 |
-| nowcast_baseline_metrics.json | meta_rf | 0.310807 |
-| nowcast_baseline_metrics.json | meta_xgb | -0.706576 |
+| nowcast_baseline_metrics.json | meta_intercept | -2.02165 |
+| nowcast_baseline_metrics.json | meta_logit | 0.358218 |
+| nowcast_baseline_metrics.json | meta_rf | -0.315354 |
 | nowcast_baseline_metrics.json | fixed_weights | [0.18, 0.8200000000000001] |
 | nowcast_full_metrics.json | meta_intercept | -3.6343 |
 | nowcast_full_metrics.json | meta_logit | 0.239581 |
@@ -74,10 +72,10 @@ It is generated deterministically from files already present in the repository.
 
 | feature_set | metric_block | auroc | brier | f1 |
 | --- | --- | --- | --- | --- |
-| baseline | now_metrics | 0.948489 | 0.0361431 | 0.723404 |
-| baseline | forecast_metrics | 0.844208 | 0.0532173 | 0.421053 |
-| baseline | composite_metrics | 0.949061 | 0.0359592 | 0.723404 |
-| baseline | in_sample_metrics | 0.896513 | 0.0436221 | 0.486486 |
+| baseline | now_metrics | 0.887248 | 0.0465556 | 0.571429 |
+| baseline | forecast_metrics | 0.737179 | 0.0677669 | 0.176471 |
+| baseline | composite_metrics | 0.887248 | 0.0465556 | 0.571429 |
+| baseline | in_sample_metrics | 0.969723 | 0.0385772 | 0.536585 |
 | full | now_metrics | 0.950206 | 0.0353194 | 0.695652 |
 | full | forecast_metrics | 0.906593 | 0.0450319 | 0.55814 |
 | full | composite_metrics | 0.949519 | 0.0341841 | 0.666667 |
@@ -146,9 +144,9 @@ _No per-fold metric rows found in metrics JSON artifacts._
 
 | scenario | r0 | window_start | window_end | peak_pre_r0 | peak_month | rows |
 | --- | --- | --- | --- | --- | --- | --- |
-| 2001_dotcom | 2001-03-31 | 2000-03-31 | 2001-02-28 | 0.0583635 | 2000-03-31 | 12 |
-| 2008_gfc | 2007-12-31 | 2006-12-31 | 2007-11-30 | 0.128798 | 2007-05-31 | 12 |
-| 2020_covid | 2020-02-29 | 2019-02-28 | 2019-12-31 | 0.141869 | 2019-02-28 | 11 |
+| 2001_dotcom | 2001-03-31 | 2000-03-31 | 2001-02-28 | 0.0682538 | 2000-03-31 | 12 |
+| 2008_gfc | 2007-12-31 | 2006-12-31 | 2007-11-30 | 0.269116 | 2007-08-31 | 12 |
+| 2020_covid | 2020-02-29 | 2019-02-28 | 2019-12-31 | 0.152932 | 2019-02-28 | 11 |
 
 ## ALFRED Vintage-vs-Revised Comparison
 
@@ -164,7 +162,7 @@ LaTeX companion file found: `artifacts/figures/alfred_comparison.tex`.
 
 | date | fold_idx | USREC | target_h0 | target_h3 | P_now | P_3m | P_AWRY |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-01-31 | 5 | 0 | 0 | 0 | 0.0946598 | 0.0914612 | 0.0922608 |
+| 2026-01-31 | 5 | 0 | 0 | 0 | 0.0339492 | 0.126174 | 0.0339492 |
 
 ## Recent Raw Feature Values
 
@@ -184,7 +182,7 @@ LaTeX companion file found: `artifacts/figures/alfred_comparison.tex`.
 | NFCI | 2026-04-10 | -0.465 | 2884 |
 | PAYEMS | 2026-03-01 | 158637 | 675 |
 | PERMIT | 2026-01-01 | 1386 | 673 |
-| RRSFS | 2026-02-01 | 225483 | 409 |
+| RRSFS | 2026-03-01 | 227696 | 410 |
 | SP500 | 2026-03-23 | 6581 | 2513 |
 | T10Y3M | 2026-04-20 | 0.55 | 11076 |
 | TEDRATE | 2022-01-21 | 0.09 | 8853 |
@@ -202,30 +200,30 @@ LaTeX companion file found: `artifacts/figures/alfred_comparison.tex`.
 | artifacts/figures/ablation_comparison.png | 37024 | .png |
 | artifacts/figures/alfred_comparison.csv | 355 | .csv |
 | artifacts/figures/alfred_comparison.tex | 350 | .tex |
-| artifacts/figures/alpha_curve.png | 49715 | .png |
+| artifacts/figures/alpha_curve.png | 55201 | .png |
 | artifacts/figures/diagnostic_fold_counts.csv | 554 | .csv |
 | artifacts/figures/diagnostic_peaks.csv | 370 | .csv |
 | artifacts/figures/diagnostic_threshold_fp.csv | 307 | .csv |
 | artifacts/figures/diagnostic_threshold_sweep.csv | 94 | .csv |
 | artifacts/figures/reliability.png | 68660 | .png |
-| artifacts/figures/threshold_pr_curve.png | 35809 | .png |
+| artifacts/figures/threshold_pr_curve.png | 43553 | .png |
 | artifacts/models/ablation_summary.json | 810 | .json |
 | artifacts/models/calibration.json | 45 | .json |
-| artifacts/models/composite_baseline_metrics.json | 155 | .json |
+| artifacts/models/composite_baseline_metrics.json | 142 | .json |
 | artifacts/models/composite_full_metrics.json | 156 | .json |
 | artifacts/models/composite_full_news_metrics.json | 144 | .json |
 | artifacts/models/composite_stress_metrics.json | 141 | .json |
-| artifacts/models/forecast3_baseline_metrics.json | 1079 | .json |
+| artifacts/models/forecast3_baseline_metrics.json | 1048 | .json |
 | artifacts/models/forecast3_full_metrics.json | 2850 | .json |
 | artifacts/models/forecast3_full_news_metrics.json | 3136 | .json |
 | artifacts/models/forecast3_stress_metrics.json | 2558 | .json |
 | artifacts/models/in_sample_metrics.json | 97 | .json |
-| artifacts/models/nowcast_baseline_metrics.json | 1092 | .json |
+| artifacts/models/nowcast_baseline_metrics.json | 1061 | .json |
 | artifacts/models/nowcast_full_metrics.json | 2851 | .json |
 | artifacts/models/nowcast_full_news_metrics.json | 3136 | .json |
 | artifacts/models/nowcast_stress_metrics.json | 2559 | .json |
-| artifacts/models/thresholds.json | 150 | .json |
-| artifacts/models/walk_forward_summary_baseline.json | 901 | .json |
+| artifacts/models/thresholds.json | 167 | .json |
+| artifacts/models/walk_forward_summary_baseline.json | 944 | .json |
 | artifacts/models/walk_forward_summary_full.json | 906 | .json |
 | artifacts/models/walk_forward_summary_full_news.json | 910 | .json |
 | artifacts/models/walk_forward_summary_stress.json | 913 | .json |
@@ -279,6 +277,8 @@ LaTeX companion file found: `artifacts/figures/alfred_comparison.tex`.
 | artifacts/oof_preds/nowcast_xgb_full.parquet | 7245 | .parquet |
 | artifacts/oof_preds/nowcast_xgb_full_news.parquet | 7228 | .parquet |
 | artifacts/oof_preds/nowcast_xgb_stress.parquet | 7169 | .parquet |
+| artifacts/reports/awry_export_20260421_1005.tex | 32796 | .tex |
+| artifacts/reports/awry_summary_20260421_1005.md | 27994 | .md |
 
 ## Report-Writing Checklist
 

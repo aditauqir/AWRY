@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from config import FIGURES_DIR
+from config import FIGURES_DIR, MODELS_DIR
 from features import equity_config as _equity_config
 
 # Support older equity_config that only defined DEFAULT_EQUITY_SERIES.
@@ -57,6 +57,97 @@ def _load_alfred_comparison() -> pd.DataFrame:
     return pd.read_csv(path)
 
 
+def _load_json_artifact(name: str) -> dict[str, Any]:
+    """Return an artifact JSON payload, or an empty dict if missing/unreadable."""
+    path = MODELS_DIR / name
+    if not path.exists():
+        return {}
+    try:
+        import json
+
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _load_csv_artifact(name: str) -> tuple[pd.DataFrame, str]:
+    """Return a diagnostic CSV plus a note instead of crashing when missing."""
+    path = FIGURES_DIR / name
+    if not path.exists():
+        return pd.DataFrame(), f"File not found: {path.as_posix()}"
+    try:
+        return pd.read_csv(path), ""
+    except Exception as exc:
+        return pd.DataFrame(), f"Could not read {path.as_posix()}: {exc}"
+
+
+def _append_missing_note(df: pd.DataFrame, note: str) -> pd.DataFrame:
+    """Create a visible empty table row when a diagnostic artifact is absent."""
+    if not note:
+        return df
+    return pd.DataFrame([{"note": note}])
+
+
+def _nearest_threshold_column(df: pd.DataFrame, threshold: float) -> str | None:
+    """Find the threshold-sweep column closest to the fitted threshold."""
+    best_col: str | None = None
+    best_gap = float("inf")
+    for col in df.columns:
+        if col == "scenario":
+            continue
+        try:
+            gap = abs(float(col) - float(threshold))
+        except (TypeError, ValueError):
+            continue
+        if gap < best_gap:
+            best_gap = gap
+            best_col = str(col)
+    return best_col
+
+
+def _load_diagnostic_tables(fitted_threshold: float) -> dict[str, pd.DataFrame]:
+    """Load diagnostic tables used by the report export."""
+    fold_counts, fold_note = _load_csv_artifact("diagnostic_fold_counts.csv")
+    peaks, peaks_note = _load_csv_artifact("diagnostic_peaks.csv")
+    sweep, sweep_note = _load_csv_artifact("diagnostic_threshold_sweep.csv")
+    fp, fp_note = _load_csv_artifact("diagnostic_threshold_fp.csv")
+
+    fold_counts = _append_missing_note(fold_counts, fold_note)
+    fp = _append_missing_note(fp, fp_note)
+
+    # COMMENT: The threshold sweep may have been generated with a rounded
+    # fitted threshold column (for example 0.2325), while thresholds.json stores
+    # the exact fitted value. We report the nearest available sweep column and
+    # keep that column name visible so the table is traceable to the artifact.
+    if peaks_note or sweep_note or peaks.empty or sweep.empty:
+        lead_table = pd.DataFrame(
+            [
+                {
+                    "note": "; ".join(note for note in (peaks_note, sweep_note) if note)
+                    or "No scenario lead-time rows available.",
+                }
+            ]
+        )
+    else:
+        threshold_col = _nearest_threshold_column(sweep, fitted_threshold)
+        lead_table = peaks.copy()
+        if threshold_col is not None:
+            lead_cols = sweep[["scenario", threshold_col]].rename(
+                columns={threshold_col: "lead_months_at_nearest_threshold"}
+            )
+            lead_table = lead_table.merge(lead_cols, on="scenario", how="left")
+            lead_table["nearest_threshold_in_sweep"] = threshold_col
+        else:
+            lead_table["lead_months_at_nearest_threshold"] = "not available"
+            lead_table["nearest_threshold_in_sweep"] = "not available"
+
+    return {
+        "fold_counts": fold_counts,
+        "scenario_leads": lead_table,
+        "precision_recall_tradeoff": fp,
+    }
+
+
 def collect_awry_export_payload(
     *,
     generated_at: str,
@@ -81,6 +172,17 @@ def collect_awry_export_payload(
     p_awry = float(last["P_AWRY"])
     c_now = alpha * p_now
     c_3m = (1.0 - alpha) * p_3m
+    wf_summary = _load_json_artifact("walk_forward_summary_baseline.json")
+    threshold_payload = _load_json_artifact("thresholds.json")
+    composite_metrics = wf_summary.get("composite_metrics", {}) if isinstance(wf_summary, dict) else {}
+    fitted_threshold = (
+        (wf_summary.get("thresholds", {}) or {}).get("threshold")
+        if isinstance(wf_summary, dict)
+        else None
+    )
+    if fitted_threshold is None and isinstance(threshold_payload, dict):
+        fitted_threshold = threshold_payload.get("threshold")
+    class_imbalance = threshold_payload.get("class_imbalance") if isinstance(threshold_payload, dict) else None
 
     ts_key = pd.Timestamp(test_ts)
     row_test = hist.loc[ts_key]
@@ -107,6 +209,28 @@ def collect_awry_export_payload(
             {"field": "α·P_now", "value": _fmt_pct(c_now)},
             {"field": "(1−α)·P_3m", "value": _fmt_pct(c_3m)},
             {"field": "NBER USREC (same month)", "value": str(int(last["USREC"]))},
+            # COMMENT: These fields are sourced from the current artifact JSONs
+            # so the export remains aligned with the fitted model run.
+            {
+                "field": "Composite AUROC",
+                "value": _fmt_float(composite_metrics.get("auroc", diagnostics.get("auroc", float("nan"))), 4),
+            },
+            {
+                "field": "Composite Brier",
+                "value": _fmt_float(composite_metrics.get("brier", diagnostics.get("brier", float("nan"))), 4),
+            },
+            {
+                "field": "Composite F1",
+                "value": _fmt_float(composite_metrics.get("f1", diagnostics.get("f1", float("nan"))), 4),
+            },
+            {
+                "field": "Fitted threshold tau*",
+                "value": _fmt_float(float(fitted_threshold), 6) if fitted_threshold is not None else "â€”",
+            },
+            {
+                "field": "Class imbalance",
+                "value": _fmt_float(float(class_imbalance), 6) if class_imbalance is not None else "â€”",
+            },
         ]
     )
 
@@ -167,6 +291,9 @@ def collect_awry_export_payload(
         "p_3m_t": p_3m_t,
         "p_awry_t": p_awry_t,
         "alfred": _load_alfred_comparison(),
+        "diagnostic_tables": _load_diagnostic_tables(
+            float(fitted_threshold) if fitted_threshold is not None else float(test_threshold)
+        ),
     }
 
 
@@ -237,6 +364,17 @@ def build_awry_markdown_export(
 
     parts.append("\n## Model diagnostics (in-sample, composite vs NBER)\n\n")
     parts.append(_dataframe_to_markdown(p["diag"]))
+    diagnostic_tables = p["diagnostic_tables"]
+    parts.append("\n## Walk-Forward Fold Structure\n\n")
+    parts.append(_dataframe_to_markdown(diagnostic_tables["fold_counts"]))
+    parts.append("\n## Scenario Lead Times at Fitted Threshold\n\n")
+    parts.append(
+        "This table combines pre-recession probability peaks with the nearest fitted-threshold "
+        "column available in the threshold-sweep diagnostic artifact.\n\n"
+    )
+    parts.append(_dataframe_to_markdown(diagnostic_tables["scenario_leads"]))
+    parts.append("\n## Precision-Recall Tradeoff\n\n")
+    parts.append(_dataframe_to_markdown(diagnostic_tables["precision_recall_tradeoff"]))
     if not p["alfred"].empty:
         parts.append("\n## Vintage vs Revised Comparison\n\n")
         parts.append(
