@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import json
 from datetime import datetime
 from pathlib import Path
 
@@ -38,6 +39,53 @@ from features.equity_config import DEFAULT_EQUITY_SERIES
 from awry_pipeline import fit_awry_pipeline, predict_history
 
 st.set_page_config(page_title="AWRY", layout="wide", initial_sidebar_state="expanded")
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+MODELS_DIR = PROJECT_ROOT / "artifacts" / "models"
+FALLBACK_FITTED_THRESHOLD = 0.2325
+FALLBACK_FITTED_ALPHA = 1.0
+
+
+def _load_numeric_json_value(path: Path, keys: tuple[str, ...], fallback: float, label: str) -> float:
+    if not path.exists():
+        print(f"[dashboard] Warning: {path} missing; using fallback {label}={fallback}.")
+        return fallback
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[dashboard] Warning: could not read {path} ({exc}); using fallback {label}={fallback}.")
+        return fallback
+
+    for key in keys:
+        value = payload.get(key)
+        if value is not None:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                print(f"[dashboard] Warning: {path}:{key} is not numeric; trying the next key.")
+
+    print(f"[dashboard] Warning: {path} has no usable {label} key; using fallback {label}={fallback}.")
+    return fallback
+
+
+def load_fitted_threshold() -> float:
+    """Load the model operating threshold used for fitted classification labels."""
+    return _load_numeric_json_value(
+        MODELS_DIR / "thresholds.json",
+        ("f1_optimal", "f1_max", "tau", "operating_threshold"),
+        FALLBACK_FITTED_THRESHOLD,
+        "threshold",
+    )
+
+
+def load_fitted_alpha() -> float:
+    """Load the fitted composite alpha used for model-call blend labels."""
+    return _load_numeric_json_value(
+        MODELS_DIR / "alpha_tuned.json",
+        ("alpha", "fitted_alpha", "alpha_tuned", "best_alpha"),
+        FALLBACK_FITTED_ALPHA,
+        "alpha",
+    )
 
 
 def _month_end_label(ts: pd.Timestamp) -> str:
@@ -401,10 +449,24 @@ def main() -> None:
     st.divider()
     st.subheader("Historical test case (walk-forward OOF)")
     st.caption(
-        "Pick a past month. **P_now** vs NBER that month; **P_3m** vs NBER three months later. "
-        "Threshold vs actual NBER using OOF probabilities."
+        "The fitted threshold is the model's operating point (F1-optimal on OOF predictions). "
+        "The slider lets you explore how classification changes at other thresholds; it does not change the model."
     )
-    threshold = st.slider("Decision threshold", 0.1, 0.9, float(round(default_threshold / 0.05) * 0.05), 0.05)
+    st.caption(
+        "Pick a past month. **P_now** is compared with NBER that month; "
+        "**P_3m** is compared with NBER three months later."
+    )
+    fitted_threshold = load_fitted_threshold()
+    fitted_alpha = load_fitted_alpha()
+    threshold = st.slider(
+        "Sensitivity threshold",
+        0.1,
+        0.9,
+        float(round(fitted_threshold / 0.05) * 0.05),
+        0.05,
+        help="Exploration only. The fitted model-call labels below use the F1-optimal threshold.",
+    )
+    slider_threshold = threshold
 
     idx_map = {pd.Timestamp(t).strftime("%Y-%m"): pd.Timestamp(t) for t in hist.index}
     month_keys = list(idx_map.keys())
@@ -422,10 +484,13 @@ def main() -> None:
     act_3m = _realized_usrec_3m_ahead(pipe, ts)
     fc_ts_s = _forecast_month_end(ts, 3)
 
-    ok_now = _match_ok(p_now_s, act_now, threshold)
-    ok_3m = _match_ok(p_3m_s, act_3m, threshold) if pd.notna(act_3m) else None
+    # Keep fitted-threshold labels separate from slider-threshold labels so
+    # sensitivity checks do not relabel the model's operating-point call.
+    ok_now_fitted = _match_ok(p_now_s, act_now, fitted_threshold)
+    ok_3m_fitted = _match_ok(p_3m_s, act_3m, fitted_threshold) if pd.notna(act_3m) else None
+    ok_now_slider = _match_ok(p_now_s, act_now, slider_threshold)
+    ok_3m_slider = _match_ok(p_3m_s, act_3m, slider_threshold) if pd.notna(act_3m) else None
 
-    fitted_alpha = float(pipe.alpha)
     st.markdown("#### Composite weights")
     mix_w = st.slider(
         "Weight w on P_now (1 − w on P_3m)",
@@ -438,6 +503,10 @@ def main() -> None:
     st.latex(
         rf"P_{{\mathrm{{blend}}}}(w) = {mix_w:.2f}\,P_{{\mathrm{{now}}}} + {1.0 - mix_w:.2f}\,P_{{\mathrm{{3m}}}}"
     )
+    # Show the fitted-alpha composite and user-slider composite side by side.
+    # The slider blend is for sensitivity exploration only.
+    fitted_blend = fitted_alpha * p_now_s + (1.0 - fitted_alpha) * p_3m_s
+    slider_blend = mix_w * p_now_s + (1.0 - mix_w) * p_3m_s
     st.plotly_chart(
         composite_breakdown_figure(
             p_now_s,
@@ -447,6 +516,26 @@ def main() -> None:
         ),
         use_container_width=True,
     )
+    b_fit, b_user = st.columns(2)
+    with b_fit:
+        st.markdown(
+            f"**Fitted model blend:** {fitted_blend:.1%} "
+            f"(alpha = {fitted_alpha:.2f}, threshold = {fitted_threshold:.1%}) "
+            f"-> **{_pred_label(fitted_blend, fitted_threshold)}**"
+        )
+    with b_user:
+        st.markdown(
+            f"**Slider blend:** {slider_blend:.1%} "
+            f"(w = {mix_w:.2f}, threshold = {slider_threshold:.1%}) "
+            f"-> **{_pred_label(slider_blend, slider_threshold)}**"
+        )
+
+    st.caption(
+        f"Slider-only labels: nowcast -> {_pred_label(p_now_s, slider_threshold)}; "
+        f"3-month forecast -> {_pred_label(p_3m_s, slider_threshold)}."
+    )
+    threshold = fitted_threshold
+    st.markdown(f"**Fitted-threshold labels below use {threshold:.1%}.**")
 
     c_a, c_b = st.columns(2)
     with c_a:
@@ -468,11 +557,13 @@ def main() -> None:
                 f"- **Actual NBER ({_month_end_label(fc_ts_s)}):** {_actual_label(act_3m)}"
             )
 
-    pill_now = _match_pill("Nowcast match", ok_now)
-    pill_3m = _match_pill("3-month match", ok_3m)
+    pill_now = _match_pill("Fitted nowcast match", ok_now_fitted)
+    pill_3m = _match_pill("Fitted 3-month match", ok_3m_fitted)
+    slider_now = _match_pill("Slider nowcast match", ok_now_slider)
+    slider_3m = _match_pill("Slider 3-month match", ok_3m_slider)
     st.markdown(
         f'<div style="text-align:center;margin:1.25rem 0 0.75rem 0;display:flex;justify-content:center;'
-        f"gap:0.65rem;flex-wrap:wrap;\">{pill_now}{pill_3m}</div>",
+        f"gap:0.65rem;flex-wrap:wrap;\">{pill_now}{pill_3m}{slider_now}{slider_3m}</div>",
         unsafe_allow_html=True,
     )
 
