@@ -121,6 +121,9 @@ def section_header() -> SectionResult:
 def section_feature_set() -> SectionResult:
     rows: list[dict[str, Any]] = []
     missing: list[str] = []
+    # Walk-forward summaries are the best top-level artifacts for a
+    # paper table because each one names the feature set, alpha, threshold, and
+    # composite metrics from that run.
     for path in sorted(MODELS.glob("walk_forward_summary_*.json")):
         payload, err = safe_load_json(path)
         if err:

@@ -11,6 +11,9 @@ from features.transforms import log_diff
 from ingestion.fred_client import FredClient
 from ingestion.news_sentiment_loader import load_news_sentiment_monthly
 
+# These groups are the data story for the demo: core macro variables,
+# optional stress indicators, and optional news sentiment get combined into one
+# month-end table before any model sees the data.
 CORE_MONTHLY_FRED = [
     "PAYEMS",
     "INDPRO",
@@ -113,7 +116,7 @@ NEWS_SENTIMENT_FEATURE_COLUMNS = [
     "NEWS_SENTIMENT_XLSX_chg12",
 ]
 
-# COMMENT: Keep the legacy export name because multiple dashboard paths import it.
+# Keep the legacy export name because multiple dashboard paths import it.
 FEATURE_COLUMNS = CORE_FEATURE_COLUMNS.copy()
 
 
@@ -149,6 +152,8 @@ def _iter_existing(columns: Iterable[str], df: pd.DataFrame) -> list[str]:
 def _selected_raw_feature_columns(feature_set: str) -> list[str]:
     feature_set = _feature_set_name(feature_set)
     cols = CORE_FEATURE_COLUMNS.copy()
+    # Feature sets are additive. Baseline is deliberately small; stress,
+    # full, and full_news layer in more signals for ablation comparisons.
     if feature_set in {"stress", "full"}:
         cols.extend(STRESS_FEATURE_COLUMNS)
         cols.extend(["SAHM_GAP", "T10Y3M_INVERSION_DURATION"])
@@ -180,6 +185,8 @@ def build_raw_monthly_panel(
     eq = equity_series or DEFAULT_EQUITY_SERIES
 
     frames: dict[str, pd.Series] = {}
+    # FRED series arrive at different frequencies. Every series is
+    # normalized to month-end before the feature builder creates targets/lags.
     for sid in CORE_MONTHLY_FRED + MONTHLY_STRESS_FRED:
         ser = c.fetch_series_cached(sid, force_refresh=fr) if cached else c.fetch_series(sid)
         frames[sid] = _month_end_resample(ser, how="last")
@@ -196,7 +203,7 @@ def build_raw_monthly_panel(
     df["NASDAQCOM"] = _month_end_resample(log_diff(sp).rename("NASDAQCOM"), how="mean").reindex(df.index)
     df["VIXCLS"] = _month_end_resample(vx, how="mean").reindex(df.index)
     df["USREC"] = _month_end_resample(ur, how="last").reindex(df.index)
-    # COMMENT: The local Excel sentiment file is a daily text-based signal.
+    # The local Excel sentiment file is a daily text-based signal.
     # We align it to month-end means so it enters the model like the other
     # high-frequency market and uncertainty indicators.
     try:
@@ -221,7 +228,7 @@ def _trim_start_and_fill(df: pd.DataFrame) -> pd.DataFrame:
     start = max(starts)
     out = df.loc[start:].copy()
 
-    # COMMENT: TEDRATE ended in 2022. Keep post-2022 months missing so later imputation
+    # TEDRATE ended in 2022. Keep post-2022 months missing so later imputation
     # can distinguish "series unavailable" from "stress unchanged."
     skip_ffill = {"TEDRATE"}
     fill_cols = [col for col in out.columns if col not in skip_ffill]
@@ -252,7 +259,7 @@ def add_structural_features(df: pd.DataFrame) -> pd.DataFrame:
         out["T10Y3M_INVERSION_DURATION"] = inverted.groupby(groups).cumsum()
 
     if "NEWS_SENTIMENT_XLSX" in out.columns:
-        # COMMENT: The sentiment index can be negative, so we keep it in levels
+        # The sentiment index can be negative, so we keep it in levels
         # and summarize it with a short moving average plus a 12-month change.
         out["NEWS_SENTIMENT_XLSX_ma3"] = out["NEWS_SENTIMENT_XLSX"].rolling(3, min_periods=2).mean()
         out["NEWS_SENTIMENT_XLSX_chg12"] = out["NEWS_SENTIMENT_XLSX"] - out["NEWS_SENTIMENT_XLSX"].shift(12)

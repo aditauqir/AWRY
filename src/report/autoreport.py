@@ -88,7 +88,7 @@ def _make_pipe(hist: pd.DataFrame) -> SimpleNamespace:
     alpha = float(summary.get("alpha", 1.0))
     now_w = now.get("fixed_weights") or [float("nan"), float("nan")]
     fc_w = forecast.get("fixed_weights") or [float("nan"), float("nan")]
-    # COMMENT: The export builders only need fitted weights/alpha and the
+    # The export builders only need fitted weights/alpha and the
     # historical USREC series. This avoids running training just to write a
     # report from already-materialized artifacts.
     return SimpleNamespace(
@@ -107,7 +107,7 @@ def main() -> None:
     diagnostics = summary.get("composite_metrics", {})
     latest_ts = pd.Timestamp(hist.index[-1])
     fc_ts_latest = _forecast_month_end(latest_ts, 3)
-    # COMMENT: Match the dashboard's default historical test case near the GFC
+    # Match the dashboard's default historical test case near the GFC
     # using artifact data only; no model fitting is performed here.
     test_candidates = [idx for idx in hist.index if pd.Timestamp(idx).strftime("%Y-%m") == "2007-09"]
     test_ts = pd.Timestamp(test_candidates[0] if test_candidates else hist.index[-1])

@@ -46,6 +46,8 @@ FALLBACK_FITTED_ALPHA = 1.0
 
 
 def _load_numeric_json_value(path: Path, keys: tuple[str, ...], fallback: float, label: str) -> float:
+    # Dashboard labels should follow saved research artifacts, but the
+    # app should still open during a demo if a JSON export is missing.
     if not path.exists():
         print(f"[dashboard] Warning: {path} missing; using fallback {label}={fallback}.")
         return fallback
@@ -250,6 +252,8 @@ def main() -> None:
 
     with st.sidebar:
         if st.button("Refresh FRED data"):
+            # Streamlit caches are cleared only on explicit refresh so
+            # the demo stays fast unless the user asks for a fresh data/model run.
             st.cache_resource.clear()
             st.cache_data.clear()
             st.rerun()
@@ -511,11 +515,11 @@ def main() -> None:
     act_3m = _realized_usrec_3m_ahead(pipe, ts)
     fc_ts_s = _forecast_month_end(ts, 3)
 
-    # COMMENT: The fitted alpha is a research finding from OOF Brier
+    # The fitted alpha is a research finding from OOF Brier
     # optimization, not a user preference, so the composite call is fixed here.
     p_composite = fitted_alpha * p_now_s + (1.0 - fitted_alpha) * p_3m_s
     ok_composite_fitted = _match_ok(p_composite, act_now, fitted_threshold)
-    # COMMENT: The threshold slider is still useful because it represents a
+    # The threshold slider is still useful because it represents a
     # precision/recall operating-point tradeoff for component diagnostics.
     ok_now_slider = _match_ok(p_now_s, act_now, slider_threshold)
     ok_3m_slider = _match_ok(p_3m_s, act_3m, slider_threshold) if pd.notna(act_3m) else None

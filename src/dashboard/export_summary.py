@@ -115,7 +115,7 @@ def _load_diagnostic_tables(fitted_threshold: float) -> dict[str, pd.DataFrame]:
     fold_counts = _append_missing_note(fold_counts, fold_note)
     fp = _append_missing_note(fp, fp_note)
 
-    # COMMENT: The threshold sweep may have been generated with a rounded
+    # The threshold sweep may have been generated with a rounded
     # fitted threshold column (for example 0.2325), while thresholds.json stores
     # the exact fitted value. We report the nearest available sweep column and
     # keep that column name visible so the table is traceable to the artifact.
@@ -209,7 +209,7 @@ def collect_awry_export_payload(
             {"field": "α·P_now", "value": _fmt_pct(c_now)},
             {"field": "(1−α)·P_3m", "value": _fmt_pct(c_3m)},
             {"field": "NBER USREC (same month)", "value": str(int(last["USREC"]))},
-            # COMMENT: These fields are sourced from the current artifact JSONs
+            # These fields are sourced from the current artifact JSONs
             # so the export remains aligned with the fitted model run.
             {
                 "field": "Composite AUROC",

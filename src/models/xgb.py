@@ -16,7 +16,7 @@ def build_xgb():
     """Build the constrained XGBoost classifier."""
     if XGBClassifier is None:
         raise RuntimeError("xgboost is not installed. Add it to the environment before running the stacker.")
-    # COMMENT: These constraints intentionally bias toward smoother fits because
+    # These constraints intentionally bias toward smoother fits because
     # recession data is small-sample and heavily imbalanced.
     return XGBClassifier(
         n_estimators=500,

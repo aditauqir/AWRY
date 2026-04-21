@@ -28,7 +28,7 @@ def fit_meta_learner(Z: np.ndarray, y) -> LogisticRegression:
     y_arr = np.asarray(y).astype(int).reshape(-1)
     if len(np.unique(y_arr)) < 2:
         return ConstantProbabilityModel(float(y_arr.mean()))
-    # COMMENT: Base model probabilities are highly correlated. An L2 penalty keeps
+    # Base model probabilities are highly correlated. An L2 penalty keeps
     # the stacker stable instead of swinging coefficients wildly fold to fold.
     meta = LogisticRegression(
         C=1.0,

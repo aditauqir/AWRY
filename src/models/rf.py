@@ -12,7 +12,7 @@ from models.common import ConstantProbabilityModel
 
 def build_rf() -> Pipeline:
     """Build the capped random-forest pipeline."""
-    # COMMENT: n=406 with ~7% positive class means the forest needs a hard cap
+    # n=406 with ~7% positive class means the forest needs a hard cap
     # on depth and leaf size or it will memorize the recession months.
     return Pipeline(
         steps=[
@@ -44,7 +44,7 @@ def fit_rf(X, y) -> Pipeline:
         model.fit(X, y)
         return model
     except PermissionError:
-        # COMMENT: Some Windows sandbox environments block joblib worker creation.
+        # Some Windows sandbox environments block joblib worker creation.
         # Retry single-threaded so evaluation remains reproducible instead of failing.
         single = Pipeline(
             steps=[

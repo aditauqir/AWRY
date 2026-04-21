@@ -135,6 +135,8 @@ def run_horizon_walk_forward(
     oof = _oof_frame(df.index, y, target_col)
     fold_rows: list[dict[str, Any]] = []
 
+    # Each fold trains only on the past and predicts a later block.
+    # Those held-out predictions become the OOF series used for honest metrics.
     for fold_idx, (train_idx, test_idx) in enumerate(cv.split(X), start=1):
         X_train = X.iloc[train_idx]
         y_train = y.iloc[train_idx]
@@ -256,6 +258,8 @@ def tune_alpha(
     rows: list[dict[str, float]] = []
     best_alpha = 0.5
     best_brier = float("inf")
+    # Alpha is a fitted model parameter, not a dashboard preference.
+    # We choose the blend that minimizes OOF Brier score.
     for alpha in np.linspace(0.0, 1.0, 21):
         p = alpha * frame["P_now"].values + (1.0 - alpha) * frame["P_3m"].values
         brier = brier_score_loss(frame["y_true"].values, p)
@@ -400,6 +404,8 @@ def run_full_walk_forward(
     save_artifacts: bool = True,
 ) -> dict[str, Any]:
     """Run both horizon evaluations and build the composite OOF artifact set."""
+    # The paper's headline result comes from this sequence: nowcast,
+    # 3-month forecast, alpha tuning, composite OOF metrics, then thresholding.
     now_eval = run_horizon_walk_forward(
         target_col="target_h0",
         cached=cached,

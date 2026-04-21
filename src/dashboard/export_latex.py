@@ -149,6 +149,8 @@ def build_awry_latex_export(
     realized_usrec_3m_fn: Any,
 ) -> str:
     """IEEEtran conference-style .tex; requires ``IEEEtran.cls`` (e.g. TeX Live / MiKTeX)."""
+    # LaTeX and Markdown exports share the same payload builder so the
+    # numbers in both report formats stay aligned with the same artifact files.
     p = collect_awry_export_payload(
         generated_at=generated_at,
         pipe=pipe,

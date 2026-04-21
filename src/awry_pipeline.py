@@ -9,6 +9,8 @@ from typing import Any
 
 _SRC = Path(__file__).resolve().parent
 if str(_SRC) not in sys.path:
+    # The dashboard can be launched as a module or as a script, so we
+    # add src/ explicitly to keep local imports reliable in both paths.
     sys.path.insert(0, str(_SRC))
 
 import numpy as np
@@ -101,6 +103,9 @@ def fit_awry_pipeline(
     """Fit the horizon stackers and compute OOF artifacts for the dashboard."""
     del val_fraction  # The new pipeline uses purged walk-forward CV instead.
     eq = equity_series or DEFAULT_EQUITY_SERIES
+    # This is the main handoff from the app/reporting layer into the
+    # research pipeline: build features, run walk-forward CV, tune alpha, and
+    # return both fitted models and the saved artifact tables.
     result = run_full_walk_forward(
         cached=cached,
         equity_series=eq,
@@ -133,6 +138,8 @@ def fit_awry_pipeline(
     x_cols = [col for col in x_cols if col in df.columns and col in now_eval.x_cols]
     reference_history = result.get("composite_reference")
     if isinstance(reference_history, pd.DataFrame) and not reference_history.empty:
+        # Reference history is useful for dashboard timelines, but the
+        # OOF history remains the honest out-of-sample evidence for the paper.
         full_history = reference_history.copy()
     else:
         full_history = _build_full_history(df, x_cols, now, forecast3, chosen_alpha)

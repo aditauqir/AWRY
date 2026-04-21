@@ -29,6 +29,8 @@ load_project_env()
 
 
 def _raw_dir():
+    # Keeping a local CSV cache makes demos repeatable and avoids
+    # hitting the FRED API every time the dashboard is opened.
     RAW_DATA_DIR.mkdir(parents=True, exist_ok=True)
     return RAW_DATA_DIR
 
@@ -96,6 +98,8 @@ class FredClient:
         cached_series: pd.Series | None = None
         if not force_refresh and path.exists():
             try:
+                # A cache file can be recent on disk but still stale if
+                # the last observation is too old, so both checks matter.
                 age_sec = time.time() - path.stat().st_mtime
                 stale_file = age_sec > max_cache_age_hours * 3600
                 df = pd.read_csv(path, index_col=0, parse_dates=True)

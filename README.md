@@ -95,6 +95,85 @@ Submit the full repository, including:
 
 No separate compiled executable is required for the standard submission because AWRY is a Python project run from source. If a course platform specifically asks for executables, include the Python entry commands below as the required execution method.
 
+## Demo File Walkthrough
+
+Use these files when showing the project structure in a demo. They tell the whole story from data collection to model output without needing to open every helper file.
+
+```text
+AWRY/
+|-- README.md
+|   Project overview, required software, install steps, run commands, and submission notes.
+|-- requirements.txt
+|   Python package list used to recreate the environment.
+|-- LICENSE
+|   MIT license for the project.
+|-- src/
+|   |-- config.py
+|   |   Central path and environment-variable setup.
+|   |-- awry_pipeline.py
+|   |   Main training/prediction entry point that returns the fitted AWRY pipeline.
+|   |-- pipeline.py
+|   |   Compatibility shim that re-exports the main pipeline functions.
+|   |-- ingestion/
+|   |   |-- fred_client.py
+|   |   |   Downloads and caches FRED economic series.
+|   |   |-- alfred_client.py
+|   |   |   Pulls ALFRED point-in-time vintage data for revision checks.
+|   |   |-- aggregator.py
+|   |   |   Converts high-frequency market data into month-end model inputs.
+|   |   |-- vintage_config.py
+|   |       Defines which series are revision-sensitive for vintage analysis.
+|   |-- features/
+|   |   |-- dataset_builder.py
+|   |   |   Builds the monthly modeling table, feature sets, lags, and targets.
+|   |   |-- transforms.py
+|   |       Small feature transformations such as log differences.
+|   |-- models/
+|   |   |-- logit.py
+|   |   |   Regularized logistic-regression model.
+|   |   |-- rf.py
+|   |   |   Regularized random-forest model.
+|   |   |-- stacker.py
+|   |   |   Logistic meta-learner that stacks base model probabilities.
+|   |   |-- ensemble.py
+|   |       Brier-score weighting utilities for probability blends.
+|   |-- evaluation/
+|   |   |-- walk_forward.py
+|   |   |   Purged walk-forward validation, OOF predictions, alpha tuning, and threshold selection.
+|   |   |-- diagnostics.py
+|   |   |   Diagnostic CSV generator for fold structure, lead times, and false positives.
+|   |   |-- ablation.py
+|   |       Compares feature-set variants.
+|   |-- dashboard/
+|   |   |-- app.py
+|   |   |   Streamlit dashboard entry point.
+|   |   |-- export_summary.py
+|   |   |   Builds the Markdown research export.
+|   |   |-- export_latex.py
+|   |       Builds the LaTeX/IEEE export.
+|   |-- report/
+|       |-- autoreport.py
+|       |   Regenerates dashboard-style report files.
+|       |-- generate_bundle.py
+|           Aggregates artifacts into one paper-writing bundle.
+|-- scripts/
+|   |-- verify_lead_time.py
+|       Checks OOF vs reference lead-time series for the recession scenarios.
+|-- tests/
+|   Unit tests for ingestion, features, models, and backtests.
+|-- artifacts/
+    |-- models/
+    |   JSON model metrics and fitted operating parameters.
+    |-- oof_preds/
+    |   Out-of-fold prediction parquet files.
+    |-- figures/
+    |   Diagnostic CSVs and plots.
+    |-- reports/
+    |   Generated Markdown and LaTeX exports.
+    |-- report_bundle/
+        Consolidated research-paper bundle.
+```
+
 ## Step-by-Step Installation
 
 Clone the repository:

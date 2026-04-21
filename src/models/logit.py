@@ -15,7 +15,7 @@ from models.common import ConstantProbabilityModel
 
 def build_logit() -> Pipeline:
     """Build the regularized logistic pipeline used in every horizon."""
-    # COMMENT: We standardize inside the pipeline so every fold learns its scaler
+    # We standardize inside the pipeline so every fold learns its scaler
     # only from the training window.
     return Pipeline(
         steps=[
@@ -57,7 +57,7 @@ def fit_logit(X, y, cv=None) -> Pipeline:
         search.fit(X, y)
         return search.best_estimator_
     except ValueError:
-        # COMMENT: Small early folds can still break the inner CV if one split lands
+        # Small early folds can still break the inner CV if one split lands
         # on a single-class window. Fall back to the tuned model family without CV.
         fallback = clone(model)
         fallback.fit(X, y)
