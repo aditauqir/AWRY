@@ -51,18 +51,51 @@ Additional feature sets exist for experiments:
 
 The local news-sentiment file is optional. If it is missing, AWRY fills that column with missing values and the default dashboard avoids relying on it.
 
-## Requirements
+## Required Systems and Software
 
-- Python 3.10 or newer
-- A FRED API key
-- Internet access for the first data pull
-- Windows PowerShell, macOS Terminal, or Linux shell
+Use these versions or newer unless your instructor requires an exact environment lock.
+
+| Requirement | Version / Notes |
+|---|---|
+| Operating system | Windows 10/11, macOS 12+, or a modern Linux distribution |
+| Python | Python 3.10 or newer; the local development environment used Python 3.13 |
+| Package manager | `pip` bundled with Python |
+| Shell | Windows PowerShell 5+ / PowerShell 7+, macOS Terminal, or Linux shell |
+| Git | Git 2.x, only needed if cloning from GitHub |
+| FRED API key | Required for fresh economic-data downloads |
+| Internet access | Required on the first run to pull FRED/ALFRED data unless cached data is already included |
+| LaTeX distribution | Optional; TeX Live or MiKTeX is needed only if compiling exported `.tex` files to PDF |
+
+Primary Python libraries are listed in `requirements.txt`:
+
+| Library | Minimum version | Purpose |
+|---|---:|---|
+| `pandas` | 2.0.0 | Time-series tables, monthly panel construction, artifact loading |
+| `numpy` | 1.24.0 | Numerical arrays and probability calculations |
+| `scikit-learn` | 1.3.0 | Logistic regression, random forest, metrics, walk-forward modeling |
+| `streamlit` | 1.28.0 | Interactive dashboard |
+| `plotly` | 5.17.0 | Dashboard charts |
+| `matplotlib` | 3.7.0 | Static diagnostic figures |
+| `fredapi` | 0.5.0 | FRED data access |
+| `python-dotenv` | 1.0.0 | `.env` loading |
+| `pytest` | 7.4.0 | Test runner |
 
 Get a free FRED API key here:
 
 https://fred.stlouisfed.org/docs/api/api_key.html
 
-## Installation
+## Submission Contents
+
+Submit the full repository, including:
+
+- All project source code under `src/`, `scripts/`, and `tests/`.
+- `requirements.txt`, `.env.example`, `README.md`, and `LICENSE`.
+- Generated artifacts under `artifacts/` if your instructor wants reproducible report outputs without rerunning the full pipeline.
+- Any exported report files under `artifacts/reports/` and `artifacts/report_bundle/`.
+
+No separate compiled executable is required for the standard submission because AWRY is a Python project run from source. If a course platform specifically asks for executables, include the Python entry commands below as the required execution method.
+
+## Step-by-Step Installation
 
 Clone the repository:
 
@@ -121,7 +154,7 @@ macOS/Linux equivalent:
 cp .env.example .env
 ```
 
-## Run the Dashboard
+## Step-by-Step: Run the Dashboard
 
 From the project root:
 
@@ -143,6 +176,29 @@ http://localhost:8501
 
 The first run may take a while because AWRY downloads FRED data, builds features, trains walk-forward models, and writes artifacts.
 
+## Step-by-Step: Regenerate Reports Without Retraining
+
+If the model artifacts already exist and you only want to regenerate the paper/report exports:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.report.autoreport
+.\.venv\Scripts\python.exe -m src.report.generate_bundle
+```
+
+macOS/Linux equivalent:
+
+```bash
+.venv/bin/python -m src.report.autoreport
+.venv/bin/python -m src.report.generate_bundle
+```
+
+This writes report outputs to:
+
+| Path | Output |
+|---|---|
+| `artifacts/reports/` | Markdown and LaTeX dashboard-style exports |
+| `artifacts/report_bundle/report_bundle.md` | Consolidated research-paper bundle |
+
 ## Refresh Data
 
 Use the dashboard sidebar button:
@@ -155,7 +211,7 @@ This clears Streamlit caches and reruns the data/model pipeline.
 
 You can also delete cached CSV files in `data/raw/` if you want a fully fresh FRED pull.
 
-## Regenerate Model Artifacts
+## Step-by-Step: Regenerate Model Artifacts
 
 To regenerate the default baseline pipeline artifacts from PowerShell:
 
@@ -186,7 +242,7 @@ PYTHONPATH=src .venv/bin/python -c "from evaluation.ablation import run_ablation
 PYTHONPATH=src .venv/bin/python -m evaluation.alfred_comparison
 ```
 
-## Run Tests
+## Step-by-Step: Run Tests
 
 Windows:
 
@@ -209,7 +265,8 @@ AWRY writes generated files to `artifacts/`:
 | `artifacts/models/` | Metrics, thresholds, model summaries, ablation JSON |
 | `artifacts/oof_preds/` | Out-of-fold prediction parquet files |
 | `artifacts/figures/` | Figures, precision-recall curves, alpha curves, ALFRED comparison tables |
-| `artifacts/reports/` | Reserved for report outputs |
+| `artifacts/reports/` | Markdown and LaTeX report outputs |
+| `artifacts/report_bundle/` | Consolidated paper-writing bundle |
 
 The dashboard also includes export buttons for Markdown and LaTeX research summaries.
 
@@ -225,7 +282,9 @@ AWRY/
   src/ingestion/          FRED and ALFRED data clients
   src/models/             Logistic, random forest, XGBoost, and stacker code
   src/evaluation/         Walk-forward CV, ablations, calibration, ALFRED comparison
+  src/report/             Artifact-only report and bundle generators
   src/dashboard/          Streamlit app and dashboard components
+  scripts/                Diagnostic helper scripts
   tests/                  Pytest tests
 ```
 
@@ -264,4 +323,4 @@ Current default baseline results from the latest local run:
 
 ## License
 
-Add your preferred license before publishing this repository publicly.
+AWRY is released under the MIT License. See `LICENSE` for the full license text.
