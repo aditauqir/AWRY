@@ -23,7 +23,6 @@ from dashboard.components.backtest_chart import (
     scenario_comparison_figure,
 )
 from dashboard.components.backtest_view import scenario_panel
-from dashboard.components.composite_breakdown import composite_breakdown_figure
 from dashboard.components.diagnostics_panel import compute_binary_metrics, roc_figure
 from dashboard.components.gauge import awry_gauge_figure
 from dashboard.components.indicators import compute_driver_items
@@ -72,7 +71,7 @@ def load_fitted_threshold() -> float:
     """Load the model operating threshold used for fitted classification labels."""
     return _load_numeric_json_value(
         MODELS_DIR / "thresholds.json",
-        ("f1_optimal", "f1_max", "tau", "operating_threshold"),
+        ("f1_optimal", "f1_max", "tau", "operating_threshold", "threshold", "optimal_threshold", "tau_f1"),
         FALLBACK_FITTED_THRESHOLD,
         "threshold",
     )
@@ -80,12 +79,21 @@ def load_fitted_threshold() -> float:
 
 def load_fitted_alpha() -> float:
     """Load the fitted composite alpha used for model-call blend labels."""
-    return _load_numeric_json_value(
+    keys = ("alpha", "fitted_alpha", "alpha_tuned", "best_alpha")
+    candidate_paths = (
         MODELS_DIR / "alpha_tuned.json",
-        ("alpha", "fitted_alpha", "alpha_tuned", "best_alpha"),
-        FALLBACK_FITTED_ALPHA,
-        "alpha",
+        MODELS_DIR / "walk_forward_summary_baseline.json",
+        MODELS_DIR / "composite_baseline_metrics.json",
     )
+    for path in candidate_paths:
+        if path.exists():
+            return _load_numeric_json_value(path, keys, FALLBACK_FITTED_ALPHA, "alpha")
+
+    print(
+        "[dashboard] Warning: no fitted alpha artifact found; "
+        f"using fallback alpha={FALLBACK_FITTED_ALPHA}."
+    )
+    return FALLBACK_FITTED_ALPHA
 
 
 def _month_end_label(ts: pd.Timestamp) -> str:
@@ -449,22 +457,41 @@ def main() -> None:
     st.divider()
     st.subheader("Historical test case (walk-forward OOF)")
     st.caption(
-        "The fitted threshold is the model's operating point (F1-optimal on OOF predictions). "
-        "The slider lets you explore how classification changes at other thresholds; it does not change the model."
+        "The composite P_AWRY uses the fitted α from OOF Brier optimization (not user-configurable). "
+        "The sensitivity threshold slider lets you explore how classification changes at different operating points; "
+        "it does not change the model."
     )
     st.caption(
         "Pick a past month. **P_now** is compared with NBER that month; "
         "**P_3m** is compared with NBER three months later."
     )
-    fitted_threshold = load_fitted_threshold()
-    fitted_alpha = load_fitted_alpha()
+    artifact_threshold = load_fitted_threshold()
+    artifact_alpha = load_fitted_alpha()
+    pipe_threshold = None
+    try:
+        pipe_threshold = float((getattr(pipe, "thresholds", {}) or {}).get("threshold"))
+    except (TypeError, ValueError):
+        pipe_threshold = None
+    fitted_threshold = pipe_threshold if pipe_threshold is not None and np.isfinite(pipe_threshold) else artifact_threshold
+    if pipe_threshold is not None and np.isfinite(pipe_threshold) and abs(pipe_threshold - artifact_threshold) > 1e-9:
+        print(
+            "[dashboard] Warning: artifact threshold differs from the running pipeline; "
+            f"using pipeline threshold={pipe_threshold} instead of artifact threshold={artifact_threshold}."
+        )
+    fitted_alpha = float(getattr(pipe, "alpha", artifact_alpha))
+    if abs(fitted_alpha - artifact_alpha) > 1e-9:
+        print(
+            "[dashboard] Warning: artifact alpha differs from the running pipeline; "
+            f"using pipeline alpha={fitted_alpha} instead of artifact alpha={artifact_alpha}."
+        )
     threshold = st.slider(
         "Sensitivity threshold",
         0.1,
         0.9,
-        float(round(fitted_threshold / 0.05) * 0.05),
-        0.05,
-        help="Exploration only. The fitted model-call labels below use the F1-optimal threshold.",
+        float(fitted_threshold),
+        0.0025,
+        format="%.4f",
+        help="Exploration only. The fitted composite label below always uses the fitted threshold.",
     )
     slider_threshold = threshold
 
@@ -484,59 +511,25 @@ def main() -> None:
     act_3m = _realized_usrec_3m_ahead(pipe, ts)
     fc_ts_s = _forecast_month_end(ts, 3)
 
-    # Keep fitted-threshold labels separate from slider-threshold labels so
-    # sensitivity checks do not relabel the model's operating-point call.
-    ok_now_fitted = _match_ok(p_now_s, act_now, fitted_threshold)
-    ok_3m_fitted = _match_ok(p_3m_s, act_3m, fitted_threshold) if pd.notna(act_3m) else None
+    # COMMENT: The fitted alpha is a research finding from OOF Brier
+    # optimization, not a user preference, so the composite call is fixed here.
+    p_composite = fitted_alpha * p_now_s + (1.0 - fitted_alpha) * p_3m_s
+    ok_composite_fitted = _match_ok(p_composite, act_now, fitted_threshold)
+    # COMMENT: The threshold slider is still useful because it represents a
+    # precision/recall operating-point tradeoff for component diagnostics.
     ok_now_slider = _match_ok(p_now_s, act_now, slider_threshold)
     ok_3m_slider = _match_ok(p_3m_s, act_3m, slider_threshold) if pd.notna(act_3m) else None
 
-    st.markdown("#### Composite weights")
-    mix_w = st.slider(
-        "Weight w on P_now (1 − w on P_3m)",
-        min_value=0.0,
-        max_value=1.0,
-        value=fitted_alpha,
-        step=0.05,
-        help="Drives the stacked bar and formula below. Top-of-page AWRY KPI still uses the fitted α from the pipeline.",
+    st.markdown(
+        f"**Fitted composite (α = {fitted_alpha:.2f}): "
+        f"P_AWRY = {p_composite:.1%} → {_pred_label(p_composite, fitted_threshold)} "
+        f"at fitted threshold ({fitted_threshold:.1%}).**"
     )
-    st.latex(
-        rf"P_{{\mathrm{{blend}}}}(w) = {mix_w:.2f}\,P_{{\mathrm{{now}}}} + {1.0 - mix_w:.2f}\,P_{{\mathrm{{3m}}}}"
-    )
-    # Show the fitted-alpha composite and user-slider composite side by side.
-    # The slider blend is for sensitivity exploration only.
-    fitted_blend = fitted_alpha * p_now_s + (1.0 - fitted_alpha) * p_3m_s
-    slider_blend = mix_w * p_now_s + (1.0 - mix_w) * p_3m_s
-    st.plotly_chart(
-        composite_breakdown_figure(
-            p_now_s,
-            p_3m_s,
-            mix_w,
-            subtitle="",
-        ),
-        use_container_width=True,
-    )
-    b_fit, b_user = st.columns(2)
-    with b_fit:
-        st.markdown(
-            f"**Fitted model blend:** {fitted_blend:.1%} "
-            f"(alpha = {fitted_alpha:.2f}, threshold = {fitted_threshold:.1%}) "
-            f"-> **{_pred_label(fitted_blend, fitted_threshold)}**"
-        )
-    with b_user:
-        st.markdown(
-            f"**Slider blend:** {slider_blend:.1%} "
-            f"(w = {mix_w:.2f}, threshold = {slider_threshold:.1%}) "
-            f"-> **{_pred_label(slider_blend, slider_threshold)}**"
-        )
-
     st.caption(
-        f"Slider-only labels: nowcast -> {_pred_label(p_now_s, slider_threshold)}; "
+        f"Component labels at sensitivity threshold ({slider_threshold:.2%}): "
+        f"nowcast -> {_pred_label(p_now_s, slider_threshold)}; "
         f"3-month forecast -> {_pred_label(p_3m_s, slider_threshold)}."
     )
-    threshold = fitted_threshold
-    st.markdown(f"**Fitted-threshold labels below use {threshold:.1%}.**")
-
     c_a, c_b = st.columns(2)
     with c_a:
         st.markdown(f"**As-of:** {_month_end_label(ts)}")
@@ -557,13 +550,12 @@ def main() -> None:
                 f"- **Actual NBER ({_month_end_label(fc_ts_s)}):** {_actual_label(act_3m)}"
             )
 
-    pill_now = _match_pill("Fitted nowcast match", ok_now_fitted)
-    pill_3m = _match_pill("Fitted 3-month match", ok_3m_fitted)
+    pill_composite = _match_pill("Fitted composite match", ok_composite_fitted)
     slider_now = _match_pill("Slider nowcast match", ok_now_slider)
     slider_3m = _match_pill("Slider 3-month match", ok_3m_slider)
     st.markdown(
         f'<div style="text-align:center;margin:1.25rem 0 0.75rem 0;display:flex;justify-content:center;'
-        f"gap:0.65rem;flex-wrap:wrap;\">{pill_now}{pill_3m}{slider_now}{slider_3m}</div>",
+        f"gap:0.65rem;flex-wrap:wrap;\">{pill_composite}{slider_now}{slider_3m}</div>",
         unsafe_allow_html=True,
     )
 
