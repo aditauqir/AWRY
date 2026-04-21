@@ -15,11 +15,7 @@ from sklearn.metrics import average_precision_score, brier_score_loss, precision
 from sklearn.model_selection import TimeSeriesSplit
 
 from config import FIGURES_DIR, MODELS_DIR, OOF_PRED_DIR, PROJECT_ROOT
-from dashboard.components.backtest_chart import (
-    AWRY_BACKTEST_SIGNAL_THRESHOLD,
-    SCENARIOS,
-    lead_months_awry,
-)
+from dashboard.components.backtest_chart import SCENARIOS, lead_months_awry
 from evaluation.metrics import evaluate_binary
 from features.dataset_builder import build_model_table, feature_matrix_columns, redundant_lag_columns
 from models.ensemble import brier_optimal_weights, ensemble_predict
@@ -54,8 +50,8 @@ class HorizonEvaluation:
 
 def make_cv(n_splits: int = 5, gap: int = 3) -> TimeSeriesSplit:
     """Build the purged walk-forward splitter used everywhere downstream."""
-    # COMMENT: target_h3 = USREC.shift(-3), so a 3-month gap is required to stop
-    # training labels from containing information about the first 3 test months.
+    # target_h3 = USREC.shift(-3), so we keep a 3-month purge gap to avoid
+    # training labels leaking into the first test months.
     return TimeSeriesSplit(n_splits=n_splits, gap=gap)
 
 
@@ -388,10 +384,10 @@ def build_in_sample_reference(
     return metrics
 
 
-def build_backtest_summary(hist: pd.DataFrame) -> dict[str, int | None]:
-    """Compute the AWRY lead time for each named recession scenario."""
+def build_backtest_summary(hist: pd.DataFrame, *, threshold: float) -> dict[str, int | None]:
+    """Compute scenario lead times from the same walk-forward history used for evaluation."""
     return {
-        name: lead_months_awry(hist, name, threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD)
+        name: lead_months_awry(hist, name, threshold=threshold)
         for name in SCENARIOS
     }
 
@@ -441,7 +437,7 @@ def run_full_walk_forward(
         "composite_metrics": composite_metrics,
         "alpha": alpha,
         "thresholds": thresholds,
-        "backtest_leads": build_backtest_summary(composite_reference),
+        "backtest_leads": build_backtest_summary(composite_oof, threshold=float(thresholds["threshold"])),
         "in_sample_metrics": in_sample,
     }
     if save_artifacts:

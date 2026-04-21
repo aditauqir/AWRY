@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from config import FIGURES_DIR, MODELS_DIR
-from dashboard.components.backtest_chart import AWRY_BACKTEST_SIGNAL_THRESHOLD, lead_months_awry
+from dashboard.components.backtest_chart import lead_months_awry
 from evaluation.calibration import calibrate_composite_oof
 from evaluation.walk_forward import run_full_walk_forward
 
@@ -28,8 +28,9 @@ def run_ablation_suite(*, cached: bool = True, equity_series: str | None = None)
     for label, feature_set in ABLATION_FEATURE_SETS.items():
         result = run_full_walk_forward(cached=cached, equity_series=equity_series, feature_set=feature_set)
         calibrated = calibrate_composite_oof(result["composite_oof"], save_artifacts=(feature_set == "full"))
-        lead_hist = result["composite_reference"].copy()
+        lead_hist = result["composite_oof"].copy()
         metrics = result["summary"]["composite_metrics"]
+        signal_threshold = float(result["summary"]["thresholds"]["threshold"])
         rows.append(
             {
                 "ablation": label,
@@ -37,9 +38,10 @@ def run_ablation_suite(*, cached: bool = True, equity_series: str | None = None)
                 "auroc": float(metrics["auroc"]),
                 "brier": float(metrics["brier"]),
                 "f1": float(metrics["f1"]),
-                "lead_2001": lead_months_awry(lead_hist, "2001 Dot-com", threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD),
-                "lead_2008": lead_months_awry(lead_hist, "2008 GFC", threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD),
-                "lead_2020": lead_months_awry(lead_hist, "2020 COVID", threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD),
+                "signal_threshold": signal_threshold,
+                "lead_2001": lead_months_awry(lead_hist, "2001 Dot-com", threshold=signal_threshold),
+                "lead_2008": lead_months_awry(lead_hist, "2008 GFC", threshold=signal_threshold),
+                "lead_2020": lead_months_awry(lead_hist, "2020 COVID", threshold=signal_threshold),
             }
         )
 

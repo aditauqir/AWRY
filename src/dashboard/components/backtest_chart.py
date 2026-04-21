@@ -8,9 +8,8 @@ import plotly.graph_objects as go
 from dashboard.styles.theme import COLORS
 
 
-# COMMENT: OOF probabilities are more conservative than the old in-sample dashboard.
-# Use a dedicated early-warning signal line for scenario lead charts instead of the
-# stricter classification cutoff.
+# This is only a fallback. The dashboard now prefers the fitted operating
+# threshold saved with the current pipeline.
 AWRY_BACKTEST_SIGNAL_THRESHOLD = 0.10
 
 SCENARIOS = {
@@ -24,6 +23,7 @@ def scenario_comparison_figure(
     hist: pd.DataFrame,
     raw: pd.DataFrame,
     scenario: str,
+    threshold: float | None = None,
 ) -> go.Figure:
     start, end, r0 = SCENARIOS[scenario]
     start = pd.Timestamp(start)
@@ -68,6 +68,14 @@ def scenario_comparison_figure(
         )
     )
     fig.add_vline(x=0, line_dash="solid", line_color="rgba(248,250,252,0.4)", annotation_text="R0")
+    if threshold is not None:
+        fig.add_hline(
+            y=float(threshold) * 100.0,
+            line_dash="dash",
+            line_color="rgba(248,250,252,0.35)",
+            annotation_text=f"AWRY threshold {float(threshold):.0%}",
+            annotation_position="top left",
+        )
     fig.update_layout(
         height=360,
         paper_bgcolor="rgba(0,0,0,0)",

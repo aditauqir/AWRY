@@ -34,8 +34,8 @@ def _get_fred_client() -> Fred:
 
 
 def _cache_key(series_id: str, as_of_date: str) -> str:
-    # COMMENT: Stable filename, safe on all OSes. Hash is overkill for 2 inputs
-    # but future-proofs against series IDs with special chars.
+    # Keep cache filenames stable and OS-safe. The hash is a little extra,
+    # but it helps if a series ID ever contains awkward characters.
     raw = f"{series_id}__{as_of_date}".encode()
     return hashlib.md5(raw).hexdigest()[:16] + f"_{series_id}_{as_of_date}.parquet"
 
@@ -86,12 +86,12 @@ def get_series_vintage(
 
     fred = _get_fred_client()
     try:
-        # COMMENT: Primary path — fredapi's ALFRED-backed vintage fetch.
+        # Try the real ALFRED vintage path first.
         payload = fred.get_series_as_of_date(series_id, as_of_s)
         series = _normalize_vintage_payload(payload, series_id, as_of_s)
     except Exception as exc:
-        # COMMENT: Some third-party or lightly archived series do not expose
-        # ALFRED vintages. Fall back to revised data truncated by the as-of date.
+        # Some series do not expose ALFRED vintages cleanly, so fall back to the
+        # revised series truncated at the requested as-of date.
         print(
             f"[alfred] {series_id}: no ALFRED vintage at {as_of_s} "
             f"({exc}); falling back to revised data truncated by date."

@@ -2,19 +2,18 @@
   "target": "target_h0",
   "feature_set": "full_news",
   "metrics": {
-    "brier": 0.03487624038441422,
-    "auroc": 0.9474587912087912,
-    "f1": 0.6956521739130435
+    "brier": 0.0607918832301608,
+    "auroc": 0.6918498168498168,
+    "f1": 0.3888888888888889
   },
   "meta_coefficients": {
-    "intercept": -3.8311422768048544,
-    "logit": 0.22258621518457858,
-    "rf": 0.9122891958673341,
-    "xgb": -1.2518221305113644
+    "intercept": -1.0738030561040872,
+    "logit": 0.1889899450360376,
+    "rf": -0.03281174633831252
   },
   "fixed_weights": [
-    0.09,
-    0.91
+    0.12,
+    0.88
   ],
   "dropped_lags": [],
   "x_cols": [
@@ -130,6 +129,7 @@
     "USEPUNEWSINDXM_chg12_lag2",
     "NEWS_SENTIMENT_XLSX_lag1",
     "NEWS_SENTIMENT_XLSX_lag2",
+    "NEWS_SENTIMENT_XLSX_ma3_lag1",
     "NEWS_SENTIMENT_XLSX_ma3_lag2",
     "NEWS_SENTIMENT_XLSX_chg12_lag1",
     "NEWS_SENTIMENT_XLSX_chg12_lag2"

@@ -7,8 +7,8 @@ backtesting. Non-revised series can use current FRED values.
 
 from __future__ import annotations
 
-# COMMENT: Heavily revised series. Benchmark revisions can move values by
-# hundreds of thousands of jobs or multiple percentage points.
+# These series get revised enough that we should always use ALFRED vintages
+# for honest real-time backtests.
 VINTAGE_REQUIRED = [
     "PAYEMS",
     "INDPRO",
@@ -16,8 +16,8 @@ VINTAGE_REQUIRED = [
     "W875RX1",
 ]
 
-# COMMENT: Lightly revised series. Vintage is technically correct but
-# the deltas are smaller than the core activity series above.
+# These can be pulled from ALFRED too, but their revisions are usually smaller
+# than the core activity series above.
 VINTAGE_OPTIONAL = [
     "UNRATE",
     "HOUST",
@@ -25,8 +25,8 @@ VINTAGE_OPTIONAL = [
     "ICSA",
 ]
 
-# COMMENT: These market and rate series are effectively non-revised, so
-# current FRED values are the correct point-in-time values.
+# These series are effectively not revised, so current FRED values are the
+# right point-in-time values.
 NO_REVISIONS = [
     "T10Y3M",
     "FEDFUNDS",

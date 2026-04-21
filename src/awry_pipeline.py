@@ -95,11 +95,11 @@ def fit_awry_pipeline(
     alpha: float | None = None,
     cached: bool = True,
     equity_series: str | None = None,
-    feature_set: str = "full_news",
+    feature_set: str = "baseline",
     save_artifacts: bool = True,
 ) -> AwryPipeline:
     """Fit the horizon stackers and compute OOF artifacts for the dashboard."""
-    del val_fraction  # COMMENT: The new pipeline uses purged walk-forward CV instead.
+    del val_fraction  # The new pipeline uses purged walk-forward CV instead.
     eq = equity_series or DEFAULT_EQUITY_SERIES
     result = run_full_walk_forward(
         cached=cached,

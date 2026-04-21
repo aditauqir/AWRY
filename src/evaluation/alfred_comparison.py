@@ -27,6 +27,7 @@ BACKTEST_DATES = {
     "2008_gfc": "2007-11-30",
     "2020_covid": "2020-01-31",
 }
+DEFAULT_COMPARISON_FEATURE_SET = "baseline"
 
 
 def build_vintage_panel_for_scenario(scenario: str) -> pd.DataFrame:
@@ -48,8 +49,9 @@ def build_vintage_panel_for_scenario(scenario: str) -> pd.DataFrame:
 
 
 def _panel_last_row(panel: pd.DataFrame, pipe) -> pd.DataFrame:
+    feature_set = getattr(pipe, "summary", {}).get("feature_set", DEFAULT_COMPARISON_FEATURE_SET)
     features = engineer_features(panel)
-    selected = feature_matrix_columns(features, feature_set="full")
+    selected = feature_matrix_columns(features, feature_set=feature_set)
     features = add_lags(features, selected, max_lag=2)
     row = features.tail(1).reindex(columns=pipe.x_cols)
     return row
@@ -69,7 +71,12 @@ def compare_vintage_vs_revised() -> pd.DataFrame:
     """
     Produce the vintage-vs-revised comparison table for the three scenarios.
     """
-    pipe = fit_awry_pipeline(cached=True, equity_series=DEFAULT_EQUITY_SERIES, feature_set="full", save_artifacts=False)
+    pipe = fit_awry_pipeline(
+        cached=True,
+        equity_series=DEFAULT_EQUITY_SERIES,
+        feature_set=DEFAULT_COMPARISON_FEATURE_SET,
+        save_artifacts=False,
+    )
     revised_panel = build_raw_monthly_panel(cached=True, equity_series=DEFAULT_EQUITY_SERIES)
 
     rows: list[dict[str, float | str | None]] = []

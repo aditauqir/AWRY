@@ -15,7 +15,6 @@ import pandas as pd
 import streamlit as st
 
 from dashboard.components.backtest_chart import (
-    AWRY_BACKTEST_SIGNAL_THRESHOLD,
     SCENARIOS,
     lead_months_awry,
     lead_months_sahm,
@@ -182,9 +181,10 @@ def _build_indicator_items(raw: pd.DataFrame) -> list[tuple[str, float, str, str
 
 @st.cache_resource
 def _pipeline_and_history(_cache_bust: int = 6):
-    # COMMENT: Keep the call signature compatible with older cached Streamlit imports.
-    # The current pipeline defaults to feature_set="full" and save_artifacts=True.
-    pipe = fit_awry_pipeline(cached=True, equity_series=DEFAULT_EQUITY_SERIES)
+    # Keep the call signature compatible with older cached Streamlit imports.
+    # Baseline is the strongest current feature set under the data coverage
+    # available in this repo, so the dashboard uses it by default.
+    pipe = fit_awry_pipeline(cached=True, equity_series=DEFAULT_EQUITY_SERIES, feature_set="baseline")
     hist = predict_history(pipe)
     return pipe, hist
 
@@ -201,7 +201,7 @@ def main() -> None:
     pipe, hist = _pipeline_and_history()
     raw = raw_monthly_panel()
     ablation_summary = load_ablation_summary()
-    scenario_hist = pipe.full_history.copy() if hasattr(pipe, "full_history") else hist.copy()
+    scenario_hist = hist.copy()
 
     last = hist.iloc[-1]
     prev_row = hist.iloc[-2] if len(hist) > 1 else last
@@ -216,6 +216,7 @@ def main() -> None:
     diag_metrics = compute_binary_metrics(hist["USREC"].values, hist["P_AWRY"].values)
     threshold_payload = getattr(pipe, "thresholds", {}) or {}
     default_threshold = float(threshold_payload.get("threshold", 0.5))
+    scenario_threshold = default_threshold
 
     # Header
     h1, h2 = st.columns([3, 1])
@@ -294,7 +295,7 @@ def main() -> None:
     with g1:
         st.plotly_chart(awry_gauge_figure(p_awry), use_container_width=True)
     with g2:
-        # COMMENT: Prefer model-derived drivers. Fall back to the heuristic macro bars
+        # Prefer model-derived drivers. Fall back to the heuristic macro bars
         # if the explainer artifact is unavailable or the model lacks importances.
         driver_items = compute_driver_items(pipe) or _build_indicator_items(raw)
         st.plotly_chart(indicator_bars_figure(driver_items), use_container_width=True)
@@ -321,7 +322,7 @@ def main() -> None:
             recession=hist["USREC"].values,
             mode=mode.lower(),
             show_signal_threshold=(mode == "Composite"),
-            signal_threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD,
+            signal_threshold=default_threshold,
         ),
         use_container_width=True,
     )
@@ -340,11 +341,14 @@ def main() -> None:
         )
         st.caption(
             "Months relative to approximate recession start (R0). "
-            f"Scenario overlays use the fitted reference signal at the {AWRY_BACKTEST_SIGNAL_THRESHOLD:.0%} "
-            "signal line so lead times reflect the full model stack."
+            f"Scenario overlays use the walk-forward AWRY series at the fitted {scenario_threshold:.0%} "
+            "operating threshold."
         )
-        st.plotly_chart(scenario_comparison_figure(scenario_hist, raw, scenario), use_container_width=True)
-        la = lead_months_awry(scenario_hist, scenario, threshold=AWRY_BACKTEST_SIGNAL_THRESHOLD)
+        st.plotly_chart(
+            scenario_comparison_figure(scenario_hist, raw, scenario, threshold=scenario_threshold),
+            use_container_width=True,
+        )
+        la = lead_months_awry(scenario_hist, scenario, threshold=scenario_threshold)
         ls = lead_months_sahm(raw, scenario)
         ly = lead_months_yield(raw, scenario)
         la_s = f"−{la}M" if la is not None else "—"
@@ -354,7 +358,7 @@ def main() -> None:
             f"""
 <div class="backtest-signal-grid">
   <div class="backtest-signal-card">
-    <div class="bss-label">AWRY signal (>= {AWRY_BACKTEST_SIGNAL_THRESHOLD:.0%})</div>
+    <div class="bss-label">AWRY signal (>= {scenario_threshold:.0%})</div>
     <div class="bss-value">{la_s}</div>
     <div class="bss-sub">months before R0</div>
   </div>
